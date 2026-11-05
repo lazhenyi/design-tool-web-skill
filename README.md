@@ -252,6 +252,6 @@ Full checklist in `references/qa-checklist.md`.
 
 ## Credit and boundaries
 
-The method and its numbers come from observing a public screen recording and reconstructing it through engineering; the source was never visible. Template content is neutral placeholder material (Northbeam and its projects are fictional). **Take the technique, not the brand names, copy, images or project content.**
+The method and its numbers come from observing a public screen recording and reconstructing it through engineering; the source was never visible. The starter ships with demo copy (ZhenYi's personal site) so the page is never empty; replace it with your own brand and content. **Take the technique, not someone else's brand names, copy, images or project content.**
 
 The repository currently has no license file. Add one before publishing or redistributing.

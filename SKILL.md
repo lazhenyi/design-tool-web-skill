@@ -1,153 +1,154 @@
 ---
 name: design-tool-web
-description: 开发"设计工具式"沉浸网页的完整方法与可运行模板——页面在渲染时把自己的设计稿暴露出来:Figma 式蓝色选框+手柄+尺寸标签、每个界面元素都由一个"AI 代理"光标抓住并拖到位、滚到底部所有光标汇聚成一团、故障切片/扫描线/乱码解码转场、Three.js 3D 主视觉、底部 agents/layers 工具条。Build "design-tool / Figma-canvas / multiplayer-cursor" style creative websites for portfolio sites, studio sites, award or render-contest entries. 只要用户提到:这种网页怎么做、元素被鼠标拖动出现、多光标/agent 集群、光标汇聚、世界渲染大赛/创意网页/获奖网页/作品集网站、网页里有选框和多光标、赛博/故障风/3D 动画落地页、"网页设计还能这么玩"、想复刻某个酷炫网页效果,或上传了此类网页的录屏——即使没说"skill"或"设计工具",也务必使用本 skill。不适用于普通后台/表单类页面,也不用于复制他人品牌文案与素材。
+description: A complete method and runnable template for building immersive "design-tool style" web pages that expose their own design file as they render — Figma-style blue boxes with handles and size labels, every element dragged into place by an "AI agent" cursor, all cursors converging at the bottom, glitch and scramble transitions, a Three.js hero, and an agents/layers toolbar. Build design-tool, Figma-canvas or multiplayer-cursor sites for portfolios, studio sites, award entries and contest pages. Use whenever a request mentions this kind of page, multi-cursor or agent swarms, award or contest web pages, portfolios, selection boxes and multiple cursors, cyber or glitch 3D landing pages, "web design can do this?", or a screen recording of such a page, even without the words skill or design tool. Not for dashboards or forms, and not for copying another brand's copy or assets.
 ---
 
-# 设计工具式网页(design-tool-web)
+# Design-tool web pages (design-tool-web)
 
-一种让网页"在自己被渲染的过程中,露出设计工具的界面"的开发方法:页面上**每个元素都由一个 agent 光标抓住、拖到位**(带选框、手柄、尺寸标签),拖完选框退场;滚到页面底部时,**所有 agent 光标汇聚成一团**。观众看到的是"这个页面是被一群 AI 同事现场搭出来的"。
+A method for making a web page reveal the design tool while it is still being rendered: **every element on the page is grabbed and dragged into place by an agent cursor** (with a selection box, handles and a size label), and once the drag is done the box leaves. Scroll to the bottom and **all agent cursors converge into a single cluster**. What the visitor sees is "this page was assembled on the spot by a team of AI colleagues".
 
-两个必须守住的性质,决定了它看起来是"丝滑"还是"廉价":
-1. **因果真实**:元素的出现 = 某个光标抓住并拖来它。光标位置与元素位移由同一数值、同一帧算出,不是"元素淡入 + 光标在旁边乱飘"。
-2. **不掉帧**:动画只用 `transform` / `opacity`,绝不用 `filter: blur`;覆盖层放在文档坐标系里,滚动时光标不会"滑"。
+Two properties must hold. They decide whether it looks smooth or cheap:
 
-**交付物**:一个可直接运行的单文件站点(起步模板 `assets/starter/index.html`),按用户的品牌与内容改造完成,并通过 `scripts/preview.py` 的自检。
+1. **Real causality.** An element appears because a cursor grabbed it and dragged it there. Cursor position and element offset come from the same number, computed in the same frame. Never "element fades in while a cursor drifts nearby".
+2. **No dropped frames.** Animate only `transform` and `opacity`, never `filter: blur`. Keep the overlay in document space, so cursors do not slide during scroll.
 
-## 0. 先弄清:这类页面在做什么
+**Deliverable:** one runnable single-file site (start from `assets/starter/index.html`), adapted to the user's brand and content, passing the self-check in `scripts/preview.py`.
 
-这个 skill 是对一段 21 秒、手机翻拍屏幕的录屏**反推**出来的,源码并不可见。下表区分"录屏里看得到的"和"我的推断",改造时别把推断当成事实去复刻。
+## 0. First, what this page is doing
 
-| 层 | 录屏里能看到 | 实现思路(本 skill 的做法) |
+This skill was reverse-engineered from a 21-second phone recording of a screen. The source code was never visible. The table separates "what is visible in the recording" from "my inference", so you do not replicate an inference as if it were fact.
+
+| Layer | Visible in the recording | Approach (this skill) |
 |---|---|---|
-| 内容 | 深色单页站:顶栏导航,首屏大标题"Systems that hold up.",统计数字,项目列表,联系区 | 真实语义化 DOM,深色,大字距收紧的粗体标题 + 等宽小标签 |
-| 设计层 | 蓝色细边选框,四角白色手柄,贴着元素的"宽×高"标签,框内浅蓝填充 | 每帧用 `getBoundingClientRect()` 量真实 DOM,把框画在固定覆盖层上 |
-| 代理 | 一群小箭头光标,颜色各异,散布并移动,部分带名牌 | 每个光标认领一个元素:飞到起点 → 抓住 → 拖到位 → 松手(见 `references/agent-drag.md`) |
-| 转场 | 文字被横向切片错位(像素撕裂)、红色竖线扫过、文字乱码后还原 | CSS `clip-path` 切片 + RGB 分离、WAAPI 扫描线、字符乱码解码 |
-| 主视觉 | 右侧蓝色缠绕结 + 金色发光节点,缓慢旋转 | Three.js 程序化 TorusKnot + 金色节点,无需外部模型 |
-| HUD | 底部工具条:彩色圆点、"N agents"、"layers"、按钮(分辨率低,具体文案是推测) | 固定胶囊条:代理数、图层数、Design 视图开关、Replay |
+| Content | Dark single-page site: top nav, huge hero headline "Systems that hold up.", stats, project list, contact | Real semantic DOM, dark, tight-tracking bold headings and mono micro-labels |
+| Design layer | Thin blue selection outline, four white corner handles, `width × height` label hugging the element, faint blue fill | Measure the real DOM with `getBoundingClientRect()` every frame, paint boxes on a fixed overlay |
+| Agents | A crowd of small arrow cursors in different colors, scattered and moving, some with name tags | Each cursor claims one element: fly to spawn point → grab → drag home → release (see `references/agent-drag.md`) |
+| Transitions | Text sliced horizontally and offset (pixel tearing), a red vertical line sweeping across, characters scrambling then resolving | `clip-path` slices plus RGB split, a WAAPI scanline, character scramble-decode |
+| Hero | A blue interlaced knot with a gold glowing node, slowly rotating | Procedural Three.js TorusKnot plus gold nodes; no external model |
+| HUD | Bottom toolbar: colored dots, "N agents", "layers", buttons (resolution too low to read; the exact copy is a guess) | Fixed capsule: agent count, layer count, Design view toggle, Replay |
 
-关键洞察:**覆盖层不是预先做好的动画或截图,而是从真实 DOM 实时量出来的。** 所以响应式、无障碍、SEO、内容修改都不会被特效破坏——这是这类页面能"又炫又能用"的根本。
+Key insight: **the overlay is not a pre-made animation or screenshot. It is measured from the real DOM every frame.** That is why responsiveness, accessibility, SEO and copy edits survive the effects. It is what lets a page like this be both flashy and usable.
 
-## 1. 工作流
+## 1. Workflow
 
-### Step 1 · 明确题目(最多问一个问题)
-需要知道:品牌/主题是什么、内容有哪几屏、用途(参赛/作品集/客户站)。用户没说就别追问,按下面的默认值先做,并在回复里用一行说明假设:
-- 主题:一家虚构的独立工程/设计工作室,深色
-- 4 屏:Hero → Work(3 个项目)→ Practice(3 列)→ Contact
-- 主色蓝 `#2f6bff`,点缀金 `#ffb62e`,扫描线红 `#ff3b30`
+### Step 1 · Establish the brief (ask at most one question)
+You need to know: the brand or topic, how many screens the content has, and the purpose (contest, portfolio, client site). If the user did not say, do not interrogate them. Build with the defaults below and state the assumption in one line of your reply:
+- Theme: the demo copy already in the template (a Rust engineer's personal site). Dark.
+- 4 screens: Hero → Work (3 projects) → Practice (3 columns) → Contact
+- Accent: blue `#2f6bff`, gold `#ffb62e`, scanline red `#ff3b30`
 
-别照搬录屏里那家站点的品牌名、文案和项目名。模板里用的是中性占位内容(Northbeam),应替换成用户自己的。
+Do not reuse the brand names, copy or project names from the recording. The template ships with demo content so the page is never empty; replace it with the user's own.
 
-### Step 2 · 复制起步模板
+### Step 2 · Copy the starter
 ```bash
 mkdir -p /mnt/user-data/outputs/site && cp <skill>/assets/starter/index.html /mnt/user-data/outputs/site/index.html
 ```
-模板已包含全部机制且验证过,**在它上面改,不要从零重写**。
+The template already contains every mechanism and has been verified. **Edit it; do not rewrite it from scratch.**
 
-### Step 3 · 按顺序改造
-1. **内容与品牌**:换标题/文案/导航/项目;保留每个要被"圈住"的元素上的 `data-node`。特效开关用属性:`data-glitch`(标题故障切片)、`data-scramble`(等宽小标签乱码解码)、`data-count`(数字滚动,可加 `data-dec`、`data-suffix`)。
-2. **代理的名字**:`CONFIG.agents` 里的名牌改成与项目相关的"角色"(如 layout / type / motion / a11y / perf),这是叙事的一部分,不是随便取的。
-3. **3D 主视觉**:默认是蓝色缠绕结 + 6 个金色节点。想换成别的形体,读 `references/3d-hero.md`。
-4. **节奏**:调 `CONFIG.claimGap`(光标接力间隔)、`fly` / `drag`(飞行与拖拽时长)、`spawn`(起点距离)、`linger`(选框停留)、`gatherSpacing`(集群松紧)。参数含义见第 3 节与 `references/agent-drag.md`。
-5. **想加料**(点击选中元素、蓝图/终端皮肤、拖拽手柄动画):读 `references/effects.md`。
+### Step 3 · Customize, in this order
+1. **Content and brand.** Replace headline, copy, nav, projects. Keep `data-node` on every element that should be circled. Switch effects on with attributes: `data-glitch` (headline glitch slices), `data-scramble` (mono label scramble-decode), `data-count` (count-up, optionally `data-dec`, `data-suffix`).
+2. **Agent names.** Change the tags in `CONFIG.agents` to roles that fit the project (layout / type / motion / a11y / perf). This is part of the narrative, not decoration.
+3. **3D hero.** Default is a blue interlaced knot with 6 gold nodes. To change the form, read `references/3d-hero.md`.
+4. **Pacing.** Tune `CONFIG.claimGap` (relay interval), `fly` / `drag` (flight and drag durations), `spawn` (spawn distance), `linger` (how long the box stays), `gatherSpacing` (cluster tightness). See section 3 and `references/agent-drag.md`.
+5. **Extras** (click-to-select, blueprint or terminal skin, drag-handle animation): read `references/effects.md`.
 
-### Step 4 · 自检(必须做)
+### Step 4 · Self-check (mandatory)
 ```bash
 python3 <skill>/scripts/preview.py /mnt/user-data/outputs/site/index.html --out /tmp/qa
 ```
-它会在桌面/手机/减少动态三种配置下截图并检查:控制台报错、横向溢出、固定 UI 溢出/出界、内容卡在隐藏状态、到底部是否汇聚、3D 是否出现;另有一组**运动检查**(桌面、关掉 3D):拖拽期间光标与元素抓取点的真实偏差(应≈0px)、帧间隔与慢帧占比、集群聚集程度。然后**用 `view` 看几张截图**——至少看 `*-01-hero-building`(光标正在拖元素)、`*-04-scroll-building`(滚动时拖入)、`*-05-bottom-gathered`(到底汇聚)和手机端的一张。数字通过不代表好看。
+It screenshots and checks desktop, mobile and reduced-motion profiles for: console errors, horizontal overflow, fixed UI overflow or off-screen, content stuck hidden, cluster formation at the bottom, and 3D presence. It also runs a **motion check** (desktop, 3D off): the real drift between cursor and element grab point during a drag (should be ~0px), frame intervals and slow-frame share, and how tightly the cluster gathers. Then **look at the screenshots** — at minimum `*-01-hero-building` (a cursor mid-drag), `*-04-scroll-building` (drag-in during scroll), `*-05-bottom-gathered` (gathered at the bottom) and one mobile shot. Numbers passing does not mean it looks good.
 
-沙箱连不上 CDN 时,先 `npm i three@0.128.0` 再加 `--three-local node_modules/three/build/three.min.js`。软件渲染 WebGL 下 fps 很低是正常的,别因此去砍特效;要判断覆盖层本身的开销,去掉 3D 单独测(模板在该情形下约 60 fps)。
+If the sandbox cannot reach the CDN, `npm i three@0.128.0` and add `--three-local node_modules/three/build/three.min.js`. Low fps under software-rendered WebGL is normal; do not cut effects because of it. To judge the overlay's own cost, measure with 3D removed (the template is around 60fps in that case).
 
-### Step 5 · 交付
-- 要文件:放 `/mnt/user-data/outputs/`,`present_files`。
-- 要在对话里直接发布成可分享页面(有 Artifact 工具时):单文件 HTML 即可发布。脚本只能来自 `cdnjs.cloudflare.com` 且版本写死(模板已满足);不要用 `window.storage` 和 `api.anthropic.com`。
-- 回复里讲清三件事:做了什么、假设了什么、有哪些可调旋钮。别贴整份源码。
+### Step 5 · Deliver
+- If the user wants files: put them in `/mnt/user-data/outputs/` and call `present_files`.
+- To publish a shareable page in the conversation (when an Artifact tool is available): the single HTML file is enough. Scripts may only come from `cdnjs.cloudflare.com` with pinned versions (the template already complies). Do not use `window.storage` or `api.anthropic.com`.
+- In your reply cover three things: what you built, what you assumed, and which knobs exist. Do not paste the whole source.
 
-## 2. 架构:文档空间覆盖层 + 每帧一条流水线
+## 2. Architecture: document-space overlay, one pipeline per frame
 
 ```
-z 60  #dl / #dlf  覆盖层:选框(.sel) + 代理光标(.cur)       pointer-events:none
-                  #dl  = position:absolute,文档坐标(随页面滚动,合成器同步)
-                  #dlf = position:fixed,仅放 fixed 节点(顶栏/HUD)的选框
-z 50  #hud        底部工具条(自身也是被拖入的节点)
-z 45  #scan       红色扫描线(WAAPI,一次性)
-z  0  内容层      真实 DOM,带 data-node 的元素会被测量、被拖入
-z -1  .hero-3d    Three.js 画布(在 #hero 的独立层叠上下文内,位于文字之后)
-末尾  [data-gather] 舞台:光标最终汇聚的地方(静态元素,随汇聚进度淡入)
+z 60  #dl / #dlf   Overlay: selection boxes (.sel) + agent cursors (.cur)   pointer-events:none
+                   #dl  = position:absolute, document coordinates (scrolls with the page, compositor-synced)
+                   #dlf = position:fixed, only for fixed nodes (top bar / HUD)
+z 50  #hud         Bottom toolbar (itself a dragged-in node)
+z 45  #scan        Red scanline (WAAPI, one shot)
+z  0  Content      Real DOM; elements with data-node are measured and dragged in
+z -1  .hero-3d     Three.js canvas (inside #hero's own stacking context, behind the text)
+End   [data-gather] Stage where cursors converge (static element, fades in with gather progress)
 ```
 
-主循环只有一个 `requestAnimationFrame`:
+There is a single `requestAnimationFrame` loop:
 
-1. **读阶段**:一次性读所有节点的 `getBoundingClientRect()`,并**减去我们自己施加的位移**,得到"最终布局位置"。
-2. **排队**:进入视口的 `hidden` 节点入队;到底部(`G>0.6`)时队列里剩下的直接显示。
-3. **拖拽进度 → 位移 `T`**:`T = D × (1 − ease(p))`。
-4. **代理**:空闲光标认领下一个元素(轮流,间隔 `claimGap`);拖拽中的光标 = 元素抓取点;其余按时间缓动飞行/闲逛;最后按汇聚系数 `gk` 向集群槽位混合。
-5. **写阶段**:元素 `transform`、选框、光标、舞台透明度、HUD 状态(只写覆盖层与被拖元素,读写分开,避免布局抖动)。
-6. **3D**:仅在主视觉可见且标签页可见时渲染。
+1. **Read phase.** Read every node's `getBoundingClientRect()` once, and **subtract the offset we applied ourselves** to get the "final layout position".
+2. **Queue.** `hidden` nodes entering the viewport are queued; at the bottom (`G>0.6`) whatever is left in the queue is revealed immediately.
+3. **Drag progress → offset `T`.** `T = D × (1 − ease(p))`.
+4. **Agents.** Idle cursors claim the next element (round-robin, `claimGap` apart); a dragging cursor equals the element's grab point; the rest fly or wander on time-based easing; finally each is blended toward its cluster slot by the gather factor `gk`.
+5. **Write phase.** Element `transform`, boxes, cursors, stage opacity, HUD state (write only the overlay and the dragged element; keep reads and writes separate to avoid layout thrash).
+6. **3D.** Render only while the hero is visible and the tab is active.
 
-详细机制、坐标系为什么必须是文档空间、汇聚进度怎么算:读 `references/agent-drag.md`。
+Full mechanics, why the coordinate system must be document space, and how gather progress is computed: `references/agent-drag.md`.
 
-## 3. 关键参数
+## 3. Key parameters
 
-完整表与含义见 `references/agent-drag.md` 第 8 节。最常调的几个:
+The full table is in `references/agent-drag.md` section 8. The ones you will touch most:
 
-| 参数 | 默认 | 调节建议 |
+| Parameter | Default | Guidance |
 |---|---|---|
-| `claimGap` | 70ms | 光标"接力"的间隔。越小越像同时抓,越大越像逐个施工 |
-| `fly.speed / min / max` | 1.5px/ms,340–880ms | 光标飞向起点的快慢 |
-| `drag.min / max` | 620–980ms | 拖拽时长;太短像闪现,太长拖沓 |
-| `spawn.desktop / small` | 150–300 / 70–140px | 元素起点距最终位置有多远 |
-| 光标数 | 桌面 12 / 手机 7 | 实测首屏(11 个元素)搭完:桌面约 2.0s,手机约 2.2s。再多只是噪点 |
-| `gatherSpacing` | 15px | 集群松紧 |
-| 活跃选框 | ≤ 40 | 每个被圈元素每帧读一次矩形;只给要展示的元素加 `data-node` |
-| 故障时长 | ≈560ms | 每个元素只触发一次、不循环;只作用于局部文字,不对大面积区域做高对比明暗交替(见 `references/qa-checklist.md` 的闪烁安全一节) |
-| 主色/点缀 | 蓝 / 金 / 红 | 在 `:root` 的 token 里改,代理色在 `CONFIG.agents` |
+| `claimGap` | 70ms | Interval between claims. Smaller reads as simultaneous grabbing, larger as sequential construction |
+| `fly.speed / min / max` | 1.5px/ms, 340–880ms | How fast a cursor flies to its spawn point |
+| `drag.min / max` | 620–980ms | Drag duration; too short reads as teleporting, too long drags |
+| `spawn.desktop / small` | 150–300 / 70–140px | How far from its final position an element starts |
+| Cursor count | 12 desktop / 7 mobile | Measured: the first screen (11 elements) builds in ~2.0s desktop, ~2.2s mobile. More is just noise |
+| `gatherSpacing` | 15px | Cluster tightness |
+| Active boxes | ≤ 40 | One rect read per circled element per frame; only put `data-node` on elements you want to show |
+| Glitch duration | ≈560ms | Fires once per element, never loops; only on local text, never large-area high-contrast flashing (see the flash-safety section of `references/qa-checklist.md`) |
+| Accents | blue / gold / red | Change the tokens in `:root`; agent colors live in `CONFIG.agents` |
 
-## 4. 技术栈怎么选
+## 4. Choosing a stack
 
-- **默认:单文件原生 JS + Three.js(cdnjs, r128)**。零构建、可直接发布、够做参赛级单页。
-- **升级到 Vite / Next + React Three Fiber + GSAP**:当页面多于一页、要路由与 CMS、或 3D 场景复杂时。覆盖层算法与框架无关(给节点加属性、每帧测量),迁移方式见 `references/stack-and-scaling.md`。
-- 不要为了"高级"而上框架:这类页面的瓶颈是节奏与审美,不是工程量。
+- **Default: single-file vanilla JS + Three.js (cdnjs, r128).** No build step, publishable as-is, good enough for a contest-grade single page.
+- **Upgrade to Vite / Next + React Three Fiber + GSAP** when there is more than one page, when you need routing and a CMS, or when the 3D scene is complex. The overlay algorithm is framework-agnostic (attribute the nodes, measure every frame). Migration notes in `references/stack-and-scaling.md`.
+- Do not add a framework for the sake of sophistication. The bottleneck for this kind of page is pacing and taste, not engineering effort.
 
-## 5. 做出"赢"的页面:质量门槛
+## 5. Making a page that wins: the quality bar
 
-1. **内容先于特效**:关掉 JS,内容仍完整可读(模板的 `.js` 渐进增强 + 7 秒保底揭示已处理)。
-2. **特效有叙事**:代理名牌、选框、扫描线共同讲一个故事"页面正在被搭建"。若某个特效讲不出理由,删掉它。
-3. **节制**:一屏里同时发生的动效不超过三类。扫描线只在换屏时出现一次,不要循环。
-4. **减少动态模式**:`prefers-reduced-motion` 下无光标、无扫描线、无故障、3D 静帧,内容直接显示(模板已实现)。
-5. **手机端**:代理减到 5 个,3D 退到文字后面,HUD 收窄(模板已实现)。
-6. **真机复核**:截图通过后,仍建议在真实手机和真实 GPU 上看一遍流畅度。
+1. **Content before effects.** With JS off, the content is still complete and readable (handled by the template's `.js` progressive enhancement and the 7-second fallback reveal).
+2. **Effects carry a story.** Agent tags, selection boxes and the scanline all say one thing: the page is being built. If an effect cannot justify itself, delete it.
+3. **Restraint.** No more than three kinds of motion on screen at once. The scanline fires once per screen change; it never loops.
+4. **Reduced motion.** Under `prefers-reduced-motion`: no cursors, no scanline, no glitch, static 3D frame, content shown immediately (already implemented).
+5. **Mobile.** Fewer agents, 3D behind the text, narrower HUD (already implemented).
+6. **Real-device check.** Even after screenshots pass, watch it once on a real phone with a real GPU.
 
-## 6. 常见坑(多数是做这个模板时真踩过的)
+## 6. Common pitfalls (most were actually hit while building this template)
 
-**运动与同步类**(最影响"丝滑"):
-- **入场用了 `filter: blur`**:这是掉帧的常见元凶。动画只用 `transform` 与 `opacity`。
-- **光标"滑"过元素**:覆盖层若是 `position:fixed`,滚动由合成器线程完成而光标由主线程更新,光标会落后一帧的滚动量(实测边滚边拖偏差达 70px)。覆盖层必须放进文档空间(`position:absolute` + 加 `scrollY`),实测降到 0.07px。
-- **排队的光标被派去闲逛**:同一帧只有第一个光标能通过认领间隔,其余必须原地等,不能 `wander`;否则首屏要 3.5 秒以上才搭完(修复后约 2.0 秒)。闲逛也必须可被新任务打断。
-- **元素位移用 CSS `transform` 居中**:会被 JS 覆盖。居中改用 `margin:auto` / `inset`(模板里 3D 容器和 HUD 都因此改过)。
-- **拖拽造成溢出**:起点不能让元素横向出界(手机上会撑宽布局视口),也不能向下超出文档底部(会让页面变高)。
-- **刚散开的光标一认领就偏**:`gk>0` 的光标认领后会被集群拉偏;认领前要求 `gk<0.02`,拖拽时强制 `gk=0`。
-- **用 p95 判断流畅**:帧间隔是量化的(16.7/33.3ms),一帧抖动 p95 就翻倍。看慢帧占比与最大值,并在真机上复核。
+**Motion and sync** (these matter most for smoothness):
+- **Using `filter: blur` for entrances.** This is the usual cause of jank. Animate `transform` and `opacity` only.
+- **Cursors "sliding" across elements.** If the overlay is `position:fixed`, scrolling happens on the compositor thread while cursors update on the main thread, so cursors lag by one frame of scroll (measured up to 70px while scrolling and dragging). The overlay must live in document space (`position:absolute` plus `scrollY`); measured drift drops to 0.07px.
+- **Queued cursors sent off to wander.** Only one cursor may pass the claim gate per frame; the rest must wait in place, not wander. Otherwise the first screen takes 3.5s+ to build (2.0s after the fix). Wandering must also be interruptible by new work.
+- **Element offset using CSS `transform` for centering.** It gets overwritten by JS. Center with `margin:auto` / `inset` instead (the 3D container and the HUD were changed for this reason).
+- **Drag causing overflow.** The spawn point must not take the element off-screen horizontally (this widens the mobile layout viewport), nor below the bottom of the document (this makes the page taller).
+- **Cursors that just left the cluster drifting on claim.** A cursor with `gk>0` gets pulled by the cluster after claiming. Require `gk<0.02` before claiming and force `gk=0` while dragging.
+- **Judging smoothness with p95.** Frame intervals are quantized (16.7/33.3ms); one stutter doubles p95. Look at the slow-frame share and the maximum, and verify on a real device.
 
-**布局与渲染类**:
-- **选框撑满整行**:块级元素在 flex 列里会被拉伸,选框就变成一整条。给标题加 `width:fit-content`,给 `section > [data-node]` 加 `align-self:flex-start`,选框才会贴着文字。
-- **手机上导航被挤出屏幕**:3D 画布设了负的 `right` 会横向溢出,把**手机的布局视口撑宽**(`innerWidth` 变大,固定定位元素跟着跑出可视区)。`body{overflow-x:hidden}` 挡不住。要在溢出源头所在的容器上用 `overflow-x:clip`。检测要用 `scrollWidth - clientWidth`,**不能**用 `innerWidth`,因为它自己也被撑大了(预览脚本已按此实现并验证过能抓到)。
-- **金色节点看不见**:节点球半径必须大于管半径(模板:球 .27 > 管 .2),否则整个被包在管里。光晕要用加色混合(`AdditiveBlending`),普通透明混合会发闷发棕。
-- **3D 盖住文字**:绝对定位的画布默认画在静态文字之上。给 `#hero` 加 `isolation:isolate`、给画布 `z-index:-1`。别直接给 body 级元素用负 z-index,会掉到 body 背景后面。
-- **数字不滚动**:`data-count` 写在子元素上时,`reveal()` 只处理节点自身会漏掉。模板已改为同时处理后代。
-- **内容永远隐藏**:任何一步 JS 出错都可能让 `opacity:0` 的内容永远不出现。保留 `.reveal-all` 保底。
-- **读写交错**:在遍历里一边 `getBoundingClientRect()` 一边改样式会强制反复布局。先读完再写。
-- **软件 GL 下 fps 很低≠页面慢**:先去掉 3D 再测,别误砍特效。
-- **QA 脚本自己也会漏**:这个模板里,固定 UI 溢出的检查改了三次才抓到真问题(先查视口出界,后来发现是按钮戳出了自己的胶囊容器)。新增检查时,务必拿**故意做坏的版本**验证它真的会报错。
-- **复刻边界**:学效果与手法,不复制他人的品牌名、文案、图片和项目内容。
+**Layout and rendering**:
+- **Selection box spanning a whole row.** Block elements stretch inside a flex column, so the box becomes a full-width strip. Add `width:fit-content` to headings and `align-self:flex-start` to `section > [data-node]` so the box hugs the text.
+- **Mobile nav pushed off-screen.** A negative `right` on the 3D canvas overflows horizontally and **widens the mobile layout viewport** (`innerWidth` grows and fixed elements follow it off-screen). `body{overflow-x:hidden}` does not stop this. Use `overflow-x:clip` on the container where the overflow originates. Detect with `scrollWidth - clientWidth`, **not** `innerWidth`, which is itself inflated (the preview script implements this and has been verified).
+- **Gold nodes invisible.** The node sphere radius must exceed the tube radius (template: sphere .27 > tube .2), otherwise it is swallowed by the tube. The glow needs additive blending (`AdditiveBlending`); normal alpha blending looks dull and brown.
+- **3D covering the text.** An absolutely positioned canvas paints above static text by default. Add `isolation:isolate` to `#hero` and `z-index:-1` to the canvas. Do not put a negative z-index on a body-level element; it drops behind the body background.
+- **Numbers not counting.** With `data-count` on a child element, `reveal()` only handling the node itself misses it. The template now handles descendants too.
+- **Content never appearing.** Any JS error can leave `opacity:0` content invisible forever. Keep the `.reveal-all` fallback.
+- **Interleaved reads and writes.** Calling `getBoundingClientRect()` inside a loop that also writes styles forces repeated layout. Read everything first, then write.
+- **Low fps under software GL ≠ a slow page.** Measure again with 3D removed before cutting effects.
+- **The QA script has blind spots too.** In this template the fixed-UI overflow check took three revisions before it caught the real problem (first it looked for viewport overflow, then it turned out a button was poking out of its own pill container). Whenever you add a check, verify it against a deliberately broken build.
+- **Scope of copying.** Learn the effect and the technique; do not copy someone's brand names, copy, images or project content.
 
-## 7. 参考文件(按需读取)
+## 7. Reference files (read as needed)
 
-- `references/agent-drag.md` — **核心机制**:拖入编排、光标状态机、同步原理、文档空间覆盖层、底部汇聚、参数表、变体与踩坑。先读这份。
-- `references/effects.md` — 每种特效的完整配方与变体:选框引擎、代理物理、故障切片(单层/多层)、乱码解码、扫描线与标尺、点击选中并显示检查器、蓝图/终端/浅色皮肤、编排时间线。要加料或换风格时读。
-- `references/3d-hero.md` — 换主视觉的做法:缠绕结参数、粒子场、噪声球、加载 glTF、性能预算、降级。要换 3D 形体时读。
-- `references/stack-and-scaling.md` — 升级到多页/框架/React Three Fiber 的路径,以及版本固定与 CSP 约束。
-- `references/qa-checklist.md` — 自检清单:性能预算、无障碍、闪烁安全、手机、截图该看什么。交付前读。
-- `scripts/preview.py` — 多配置截图与健康检查。
-- `assets/starter/index.html` — 可运行起步模板。
+- `references/agent-drag.md` — **Core mechanics**: drag orchestration, cursor state machine, sync principles, document-space overlay, bottom gather, parameter table, variants and pitfalls. Read this first.
+- `references/effects.md` — Full recipes and variants for every effect: selection engine, agent physics, glitch slicing (single and multi-layer), scramble decode, scanline and rulers, click-to-select with an inspector, blueprint/terminal/light skins, orchestration timeline. Read when adding effects or changing the style.
+- `references/3d-hero.md` — Changing the hero: knot parameters, particle field, noise sphere, loading glTF, performance budget, degradation. Read when changing the 3D form.
+- `references/stack-and-scaling.md` — Path to multi-page / frameworks / React Three Fiber, plus version pinning and CSP constraints.
+- `references/qa-checklist.md` — Self-check list: performance budget, accessibility, flash safety, mobile, what to look for in screenshots. Read before delivering.
+- `scripts/preview.py` — Multi-profile screenshots and health checks.
+- `assets/starter/index.html` — Runnable starter template.

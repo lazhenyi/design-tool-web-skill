@@ -1,121 +1,121 @@
-# 交付前自检(qa-checklist)
+# Pre-delivery self-check (qa-checklist)
 
-先跑脚本,再看图,最后过人工清单。脚本只能抓**机器能判断**的问题;审美、手感、真机性能、对比度这些它抓不到。
+Run the script first, then look at the screenshots, then walk the manual list. The script only catches things **a machine can judge**; taste, feel, real-device performance and contrast are not among them.
 
-## 目录
-1. 跑 `preview.py`
-2. 看截图时看什么
-3. 脚本检查不到、必须人工过的项
-4. 预算
-5. 无障碍
-6. 闪烁安全
-7. 常见失败与定位
+## Contents
+1. Run `preview.py`
+2. What to look for in the screenshots
+3. What the script cannot check and a human must
+4. Budgets
+5. Accessibility
+6. Flash safety
+7. Common failures and where to look
 
 ---
 
-## 1. 跑 `preview.py`
+## 1. Run `preview.py`
 
 ```bash
 python3 scripts/preview.py <index.html> --out /tmp/qa
-# 沙箱连不上 CDN 时:
+# when the sandbox cannot reach the CDN:
 npm i three@0.128.0 --prefix /tmp/t3
 python3 scripts/preview.py <index.html> --out /tmp/qa --three-local /tmp/t3/node_modules/three/build/three.min.js
 ```
 
-输出每个配置一行 `PASS / WARN / FAIL`。前三行是**健康检查**,第四行 `motion` 是**运动检查**。
+It prints one `PASS / WARN / FAIL` line per profile. The first three lines are **health checks**; the fourth, `motion`, is the **motion check**.
 
-**健康检查**(桌面 1440×900、手机 390×844、减少动态;每个配置都会**逐步滚动整页**,因为元素是进入视口才被拖入的):
+**Health checks** (desktop 1440×900, mobile 390×844, reduced motion; every profile **scrolls through the whole page** step by step, because elements are only dragged in when they enter the viewport):
 
-| 检查 | 级别 | 含义 |
+| Check | Level | Meaning |
 |---|---|---|
-| 控制台报错 / 页面异常 | FAIL | 任何 `console.error` 或未捕获异常。沙箱里 CDN 解析失败也会算,要区分环境问题还是代码问题 |
-| 横向溢出 | FAIL | `scrollWidth − clientWidth > 1`,或布局视口比可视视口宽。后者专门抓"手机布局视口被撑宽" |
-| 固定 UI 溢出 | FAIL | 顶栏/HUD 的内容比自己的容器宽(如按钮戳出胶囊),或出了视口 |
-| 内容卡在隐藏 | FAIL | 滚完整页后,仍有 `[data-node]` 的 opacity 接近 0 |
-| 到底部没有汇聚 | FAIL | 滚到底并等待后,`<body>` 没有 `.gathered`(减少动态模式除外) |
-| 集群松散 | WARN | 最远光标离集群中心 > 110px |
-| 没有 3D 画布也没有降级类 | WARN | 3D 既没出现也没触发 `.no-webgl` 降级 |
+| Console errors / page exceptions | FAIL | Any `console.error` or uncaught exception. A failed CDN lookup in a sandbox also counts; distinguish environment from code |
+| Horizontal overflow | FAIL | `scrollWidth − clientWidth > 1`, or the layout viewport wider than the visual viewport. The latter specifically catches a widened mobile layout viewport |
+| Fixed UI overflow | FAIL | Top bar / HUD content wider than its own container (a button poking out of the pill), or outside the viewport |
+| Content stuck hidden | FAIL | After scrolling the whole page, some `[data-node]` still has opacity near 0 |
+| No gather at the bottom | FAIL | After scrolling to the bottom and waiting, `<body>` lacks `.gathered` (reduced motion excepted) |
+| Loose cluster | WARN | Farthest cursor > 110px from the cluster center |
+| No 3D canvas and no fallback class | WARN | 3D neither appeared nor triggered the `.no-webgl` fallback |
 
-**运动检查**(桌面,**关掉 3D**,避免沙箱软件渲染 WebGL 污染数字):
+**Motion check** (desktop, **3D off**, so software-rendered WebGL does not pollute the numbers):
 
-| 检查 | 级别 | 含义 |
+| Check | Level | Meaning |
 |---|---|---|
-| 拖拽同步 | FAIL(>3px) | 拖拽期间,光标与元素抓取点的真实 DOM 距离的最大值。模板实测 0.07px,含滚轮滚动期间 |
-| 没有观察到拖拽 | FAIL | agent 从未真正抓取过元素 |
-| 慢帧占比 | WARN(>8% 或最大 >100ms) | 搭建阶段与滚轮滚动阶段分别统计 >25ms 的帧 |
-| 集群形成 | FAIL | 同上 |
+| Drag sync | FAIL (>3px) | Max real DOM distance between cursor and element grab point during a drag. The template measures 0.07px, including during wheel scrolling |
+| No drag observed | FAIL | An agent never actually carried an element |
+| Slow frame share | WARN (>8% or max >100ms) | Frames over 25ms, counted separately for the build phase and for wheel scrolling |
+| Cluster forms | FAIL | Same as above |
 
-**为什么不用 p95**:帧间隔是量化的(要么 16.7ms 要么 33.3ms),单帧抖动就让 p95 翻倍,同一份代码重复跑会在两个值间来回跳。看慢帧占比和最大值更稳。沙箱里慢帧占比通常在几个百分点,**无法区分环境噪声与真实回退**——改动前后各跑几次对比,并在真机上复核。
+**Why not p95**: frame intervals are quantized (16.7ms or 33.3ms), so a single stutter doubles p95 and the same code bounces between two values across runs. The slow-frame share and the maximum are steadier. In a sandbox the slow-frame share usually sits at a few percent, **which cannot distinguish environment noise from a real regression**: run it a few times before and after a change, and verify on real hardware.
 
-脚本会用三种配置截图,命名 `<配置>-NN-<阶段>.png`;运动检查另存 `motion-bottom-gathered.png`。
+The script screenshots all three profiles, named `<profile>-NN-<stage>.png`; the motion check saves `motion-bottom-gathered.png` separately.
 
-## 2. 看截图时看什么
+## 2. What to look for in the screenshots
 
-至少用 `view` 看这几张:
-- `desktop-01-hero-building`:加载约 0.45 秒时。应能看到**虚线幽灵框**出现在各元素起点、光标从屏幕边缘飞来、红色扫描线扫过;页面此时大部分还是空的。
-- `desktop-04-scroll-building`:滚动时。应能看到某个元素**正被光标抓着**(实线选框 + 手柄 + 尺寸标签 + 名牌),正文还没出现的位置有虚线幽灵框。
-- `desktop-03-design-view`:设计视图。所有已就位元素的选框常亮,**框应该贴着文字**而不是拉满整行。
-- `desktop-05-bottom-gathered` 与 `mobile-05-bottom-gathered`:到底部。光标聚成一团在舞台框中央,文案"N agents online · all synced",HUD 状态为 `synced`;手机端 HUD 完整、不被截断。
-- `mobile-02-hero-settled`:手机端稳定态。导航完整,3D 在文字后面且不遮挡。
+Look at at least these:
+- `desktop-01-hero-building`: about 0.45s after load. You should see **dashed ghost boxes** at each element's spawn point, cursors flying in from the screen edges, and the red scanline sweeping past; most of the page is still empty.
+- `desktop-04-scroll-building`: while scrolling. Some element should be **held by a cursor** (solid box + handles + size label + name tag), with dashed ghost boxes where body copy has not arrived yet.
+- `desktop-03-design-view`: Design view. Every settled element's box is lit, and **boxes hug the text** instead of spanning the row.
+- `desktop-05-bottom-gathered` and `mobile-05-bottom-gathered`: at the bottom. Cursors clumped in the middle of the stage frame, the caption reads "N agents online · all synced", HUD state is `synced`; on mobile the HUD is complete and not cut off.
+- `mobile-02-hero-settled`: mobile steady state. Full nav, 3D behind the text and not obscuring it.
 
-数字全绿而画面不好看是常见情况,以画面为准。
+All-green numbers with an ugly result is a common outcome. Trust the picture.
 
-## 3. 脚本检查不到、必须人工过的项
+## 3. What the script cannot check and a human must
 
-- **真机流畅度**:在一台中端手机和一台带独显/核显的电脑上滚一遍。软件渲染下的帧率没有参考价值。
-- **键盘**:Tab 能依次到达导航、按钮、输入框;焦点环清晰可见(模板用 2px 蓝色轮廓)。
-- **读屏**:关掉 CSS 后阅读顺序合理;覆盖层和 3D 画布是 `aria-hidden`,不会被读出;乱码解码是直接改 `textContent`、只持续约 650ms,之后文本恢复为最终文字;模板没有对读屏做额外保护,若读屏恰好在这 650ms 内读到该标签,会读到乱码——这是已知的小缺口,标签都很短,影响有限,但要面向读屏用户时可只对非关键标签启用 `data-scramble`。
-- **对比度**:正文与背景、等宽小标签(金色 11px)与背景都要够。小号金字在深底上通常可以,但换了皮肤就要重新核。
-- **关 JS**:禁用脚本后内容完整可读(`.js` 类由内联脚本添加,没有脚本就不会隐藏内容)。
-- **减少动态**:系统开启后,无光标、无扫描线、无故障、3D 静帧(脚本的 `reduced` 配置会截图,仍需肉眼确认)。
-- **窗口缩放/旋转**:拖动窗口宽度,选框应实时贴合,无错位残影。
-- **Replay / Design / 快捷键**:`R` 重播、`D` 切换设计视图,在输入框里打字时不应触发。
+- **Real-device smoothness**: scroll through it on a mid-range phone and on a laptop. Software-rendered frame rates mean nothing.
+- **Keyboard**: Tab reaches nav, buttons and inputs in order; the focus ring is clearly visible (the template uses a 2px blue outline).
+- **Screen readers**: with CSS off the reading order still makes sense; the overlay and the 3D canvas are `aria-hidden` and are not announced; scramble decode writes `textContent` directly and lasts only ~650ms, after which the final text is back. The template adds no extra protection here, so a screen reader reading that label during those 650ms will announce gibberish. It is a known small gap; labels are short, so the impact is limited, but if screen-reader users matter, enable `data-scramble` only on non-essential labels.
+- **Contrast**: body copy against the background, and the mono micro-labels (11px gold) against it. Small gold text on dark usually works, but re-check after changing skins.
+- **JS off**: with scripts disabled the content is complete and readable (the `.js` class is added by an inline script, so without scripts nothing is hidden).
+- **Reduced motion**: with it on system-wide, no cursors, no scanline, no glitch, static 3D (the `reduced` profile screenshots this, but confirm by eye).
+- **Resize / rotate**: drag the window width; boxes should track in real time with no misplaced remnants.
+- **Replay / Design / shortcuts**: `R` replays, `D` toggles Design view, and neither fires while typing in an input.
 
-## 4. 预算
+## 4. Budgets
 
-| 项 | 预算 | 备注 |
+| Item | Budget | Note |
 |---|---|---|
-| 同时存在的选框 | ≤ 40 | 每个被圈元素每帧读一次矩形 |
-| 代理光标 | 桌面 ≤ 12,手机 ≤ 7 | 再多只是噪点 |
-| 3D | 三角形 < 100k,draw call < 50,像素比 ≤ 2 | 见 `3d-hero.md` |
-| 单文件体积 | < 16MB(发布上限),实际应远小于 1MB | 图片内嵌会迅速膨胀 |
-| 首屏文字出现 | 不依赖 3D 加载 | 3D 脚本失败不能阻塞内容 |
-| 布局偏移 | 0 | 揭示动画只改 `opacity / transform / filter`,不改尺寸 |
+| Simultaneous boxes | ≤ 40 | One rect read per circled element per frame |
+| Agent cursors | ≤ 12 desktop, ≤ 7 mobile | More is just noise |
+| 3D | < 100k triangles, < 50 draw calls, pixel ratio ≤ 2 | See `3d-hero.md` |
+| Single-file size | < 16MB (publish limit); realistically far below 1MB | Inlined images balloon fast |
+| First screen text | Must not depend on 3D loading | A failed 3D script must not block content |
+| Layout shift | 0 | Reveal animation touches only `opacity / transform / filter`, never size |
 
-Lighthouse 有条件就跑一次。3D 页面在手机上很难拿满分,别为了分数砍掉主视觉;但 Accessibility 应保持高分,这是可以做到的。
+Run Lighthouse if you can. A 3D page rarely scores perfectly on mobile; do not cut the hero for the score. Accessibility, however, should stay high, and that is achievable.
 
-## 5. 无障碍
+## 5. Accessibility
 
-- 内容是真实语义标签(`h1/h2/p/a/button/form`),特效只是叠加层。
-- 覆盖层与装饰性 3D 画布:`aria-hidden="true"`,且 `pointer-events:none`。
-- HUD 是 `role="toolbar"`,按钮有可读文字与 `aria-pressed`。
-- 所有交互元素有可见焦点样式。
-- 尊重 `prefers-reduced-motion`(见 `effects.md` 第 10 节)。
+- Content uses real semantic tags (`h1/h2/p/a/button/form`); effects are only an overlay.
+- The overlay and the decorative 3D canvas: `aria-hidden="true"` and `pointer-events:none`.
+- The HUD is `role="toolbar"` with readable button labels and `aria-pressed`.
+- Every interactive element has a visible focus style.
+- `prefers-reduced-motion` is respected (see `effects.md` section 10).
 
-## 6. 闪烁安全
+## 6. Flash safety
 
-故障切片在约 0.56 秒的爆发里会快速切换位置,所以要自觉克制:
-- 每个元素**只触发一次**,不循环、不随滚动反复触发。
-- 只作用于局部文字,**不要**对大面积区域做高对比度的明暗快速交替(可能触发光敏性不适)。
-- 全页面里同时发生故障的元素不要太多;模板按节点依次认领、错开(`claimGap`),不会同时爆发。
-- 尊重减少动态设置,并考虑在 HUD 里提供一个"关闭特效"的开关给有需要的访客。
+Glitch slicing switches position rapidly during a ~0.56s burst, so be deliberate about it:
+- Each element **fires once**; it never loops and never re-fires on scroll.
+- Apply it only to local text. **Do not** alternate high-contrast light/dark over large areas (this can trigger photosensitive discomfort).
+- Keep the number of elements glitching at the same time low; the template claims nodes one at a time with `claimGap` spacing, so they do not burst together.
+- Respect reduced motion, and consider adding a "turn effects off" switch in the HUD for visitors who need it.
 
-我没有对故障特效做正式的闪光合规测量。要面向对合规有硬性要求的场景(政府、教育、医疗),应由对应专业人员按标准实测。
+I have not run formal flash-compliance measurement on the glitch effect. For contexts with hard compliance requirements (government, education, healthcare), have a qualified specialist measure it to the relevant standard.
 
-## 7. 常见失败与定位
+## 7. Common failures and where to look
 
-| 现象 | 多半原因 | 处理 |
+| Symptom | Likely cause | Fix |
 |---|---|---|
-| 手机上顶栏/HUD 被挤出屏幕 | 某元素横向溢出,撑宽了布局视口 | 在溢出源头容器上用 `overflow-x:clip`;`body{overflow-x:hidden}` 无效 |
-| 选框是一整条横幅 | 块级元素被 flex 拉伸 | `width:fit-content` + `align-self:flex-start` |
-| 金色节点不见 | 节点球半径 ≤ 管半径 | 节点半径 > `tube` |
-| 光晕发棕 | 普通透明混合 | 用 `AdditiveBlending` |
-| 3D 盖在文字上 | 绝对定位画布在静态文字之上 | `#hero{isolation:isolate}` + 画布 `z-index:-1` |
-| 数字不滚动 | `data-count` 在子元素,而 `reveal` 只看节点自身 | `reveal` 里同时处理后代(模板已改) |
-| 内容一直不出现 | 某段 JS 报错中断了揭示 | 保留 `.reveal-all` 保底;看控制台 |
-| 文字乱码阶段选框宽度乱跳 | 用在了比例字体上 | 乱码解码只用于等宽字体 |
-| 光标在元素上"滑" | 覆盖层是 `position:fixed`,滚动由合成器完成而光标由主线程更新 | 覆盖层放进文档空间(`position:absolute` + 加 `scrollY`),见 `agent-drag.md` 第 5 节 |
-| 首屏搭得很慢 | 排队的光标被派去闲逛,或闲逛不可被打断 | 排队的原地等;闲逛片段标 `idle` 并可打断 |
-| 拖拽开头光标偏离元素 | 刚从集群散开的光标(`gk>0`)认领了任务 | 认领前要求 `gk<0.02`;拖拽时强制 `gk=0` |
-| 拖入时页面变宽/变高 | 起点让元素横向出界或向下超出文档底部 | 过滤起点候选(见 `agent-drag.md` 第 6 节) |
-| HUD 里按钮戳出胶囊 | 加了内容但手机端没收窄 | 小屏隐藏次要元素(圆点、图层数) |
+| Top bar / HUD pushed off-screen on mobile | Some element overflows horizontally and widens the layout viewport | `overflow-x:clip` on the container where the overflow originates; `body{overflow-x:hidden}` does not work |
+| Selection box is a full-width strip | Block element stretched by flex | `width:fit-content` + `align-self:flex-start` |
+| Gold nodes missing | Node sphere radius ≤ tube radius | Node radius > `tube` |
+| Halo looks brown | Normal alpha blending | Use `AdditiveBlending` |
+| 3D covers the text | Absolutely positioned canvas paints above static text | `#hero{isolation:isolate}` + canvas `z-index:-1` |
+| Numbers do not count | `data-count` on a child, while `reveal` only handles the node itself | Handle descendants in `reveal` (already fixed in the template) |
+| Content never appears | A JS error interrupted the reveal | Keep the `.reveal-all` fallback; check the console |
+| Box width jumps during scramble | Used on a proportional font | Scramble-decode only on mono text |
+| Cursor "slides" across the element | Overlay is `position:fixed`, so scrolling runs on the compositor while cursors update on the main thread | Put the overlay in document space (`position:absolute` + `scrollY`), see `agent-drag.md` section 5 |
+| First screen builds slowly | Queued cursors were sent wandering, or wandering cannot be interrupted | Wait in place when queued; mark wander segments `idle` and make them interruptible |
+| Cursor drifts at the start of a drag | A cursor just released from the cluster (`gk>0`) claimed the job | Require `gk<0.02` before claiming; force `gk=0` while dragging |
+| Page gets wider/taller during drag-in | Spawn point puts the element off-screen horizontally or below the document bottom | Filter spawn candidates (see `agent-drag.md` section 6) |
+| HUD button pokes out of the pill | Content added but mobile was not narrowed | Hide secondary items on small screens (dots, layer count) |

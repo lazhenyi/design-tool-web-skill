@@ -1,169 +1,169 @@
-# Agent 拖入编排与集群汇聚(agent-drag)
+# Agent drag orchestration and cluster gather (agent-drag)
 
-这是 skill 的核心机制:**页面上每个元素都是被某一个 agent 光标抓住、拖到位的;滚到底部时所有光标汇聚成一团。** 起步模板已完整实现,这份文档说明它为什么这样做、每个参数管什么、怎么改。
+This is the core mechanic: **every element on the page is grabbed and dragged into place by one agent cursor; at the bottom of the page all cursors converge into a single cluster.** The starter template already implements all of it. This document explains why it works that way, what each parameter controls, and how to change it.
 
-## 目录
-1. 为什么"淡入 + 光标乱飘"不行
-2. 元素的生命周期
-3. 光标的生命周期
-4. 同步:为什么光标不会脱离元素
-5. 坐标系:为什么覆盖层必须在文档空间
-6. 起点怎么选(不溢出、不撑高页面)
-7. 底部汇聚
-8. 参数表
-9. 变体
-10. 踩过的坑
+## Contents
+1. Why "fade in + drifting cursor" fails
+2. Element lifecycle
+3. Cursor lifecycle
+4. Sync: why the cursor never leaves its element
+5. Coordinates: why the overlay must be in document space
+6. Choosing spawn points (no overflow, no page growth)
+7. Bottom gather
+8. Parameter table
+9. Variants
+10. Pitfalls
 
 ---
 
-## 1. 为什么"淡入 + 光标乱飘"不行
+## 1. Why "fade in + drifting cursor" fails
 
-早期版本的问题有两个,都不是调参能解决的:
+The early version had two problems, neither fixable by tuning numbers:
 
-1. **因果是假的。** 元素自己淡入,光标在旁边随机飘。观众的眼睛会找"是谁让它出现的",找不到,就觉得假、觉得乱。
-2. **入场用了 `filter: blur`。** 动画模糊是最容易掉帧的属性之一。动画只用 `transform` 和 `opacity`,这两个可以在合成器上完成。
+1. **The causality was fake.** The element faded in on its own while a cursor drifted randomly nearby. The eye looks for "who made this appear", finds nothing, and reads the page as fake and noisy.
+2. **The entrance used `filter: blur`.** Animating blur is one of the easiest ways to drop frames. Animate only `transform` and `opacity`, which can be done on the compositor.
 
-所以新做法让**因果真实**:元素的出现,就是某个光标抓住它并拖过来的那个动作;元素的位移和光标的位置由同一个数值算出来。
+So the new approach makes **causality real**: the element appears because a cursor grabbed it and dragged it over; the element's offset and the cursor's position come from the same value.
 
-## 2. 元素的生命周期
+## 2. Element lifecycle
 
 ```
-hidden ─(进入视口)→ queued ─(被某 agent 认领)→ claimed ─(agent 飞到起点并抓住)→ drag ─(松手)→ done
+hidden ─(enters viewport)→ queued ─(claimed by an agent)→ claimed ─(agent flies to spawn point and grabs)→ drag ─(released)→ done
 ```
 
-| 状态 | 视觉 | 发生了什么 |
+| State | What you see | What happens |
 |---|---|---|
-| `hidden` | 不可见,在最终位置 | 还没进视口,什么都不做 |
-| `queued` | 不可见 | 进入视口(顶边高于视口 92% 处),排队,按"屏幕上靠上的先"排序 |
-| `claimed` | 不可见,**但起点处出现虚线幽灵框** | agent 在飞向起点;幽灵框告诉观众"这里将出现东西" |
-| `drag` | 可见,带实线选框、手柄、尺寸标签 | 抓取停顿 90ms,然后缓出拖向最终位置 |
-| `done` | 正常 | 选框再停留 `linger` 毫秒后淡出;`transform` 清空 |
+| `hidden` | Invisible, at its final position | Not yet in the viewport; nothing happens |
+| `queued` | Invisible | Entered the viewport (top edge above 92% of viewport height), queued, sorted "topmost first" |
+| `claimed` | Invisible, **but a dashed ghost box appears at the spawn point** | An agent is flying there; the ghost box tells the viewer something will appear here |
+| `drag` | Visible, with a solid selection box, handles and size label | 90ms grab pause, then an ease-out drag to the final position |
+| `done` | Normal | The box lingers `linger` ms and fades; `transform` is cleared |
 
-要点:
-- **懒触发**:元素进入视口才排队。下面的屏不会在看不见时被"白白拖完"。
-- **滚走就跳过**:排到队时若已滚出视口,直接 `instant()` 显示,不浪费 agent 的动作。
-- 元素位移**只用 `translate3d`**,拖拽期间才设 `will-change: transform`,结束清掉。
+Key points:
+- **Lazy trigger.** An element is only queued when it enters the viewport. Lower screens are not "built" while nobody is looking.
+- **Skip on scroll-past.** If the element has already scrolled out of view when its turn comes, it is shown with `instant()`, wasting none of an agent's motion.
+- Element offsets use **`translate3d` only**; `will-change: transform` is set during the drag and cleared afterwards.
 
-## 3. 光标的生命周期
+## 3. Cursor lifecycle
 
-每个 agent 是一台小状态机:
+Each agent is a small state machine:
 
 ```
-wander(闲逛) ──有新任务──▶ claim → fly(飞向起点) → grab(抓) → drag(拖) → release(松手) → dwell(停一会) → wander …
+wander ──new job──▶ claim → fly (to spawn point) → grab → drag → release → dwell → wander …
 ```
 
-- **运动都是"按时间缓动的片段"**(`seg()`),不用弹簧。弹簧会过冲、抖动、对帧率敏感;按时间插值的缓动路径,配一点垂直于行进方向的弧度(`arc`),看起来是人手在动,而且可预测。
-- **新任务优先于闲逛**:闲逛片段标了 `idle:true`,任何时候都可被新任务打断。否则会出现"元素已经排队 2 秒了,光标还在闲逛"。
-- **轮流认领**:`claimGap`(默认 70ms)内只允许一次认领,12 个光标依次出发,形成"接力"的视觉。**排队等的光标要原地等待,不能被派去闲逛**(这是早期版本的真实 bug:同一帧里只有第一个光标认领成功,其余 11 个被打发去闲逛,首屏搭完要 3.5 秒以上,修复后约 2.0 秒)。
-- **抓取点**:在元素内部偏左上随机取一点(上限 180×70px),所以光标"抓着元素的一角",而不是中心。
-- **名牌**:仅在工作时(`.working`)或设计视图下显示,避免满屏文字。
+- **All motion is time-based eased segments** (`seg()`), never springs. Springs overshoot, jitter and depend on frame rate; a time-interpolated eased path with a small perpendicular arc (`arc`) looks like a hand moving and is predictable.
+- **New work beats wandering.** Wander segments are tagged `idle:true` and can be interrupted at any moment. Otherwise you get "the element has been queued for 2 seconds and the cursor is still wandering".
+- **Round-robin claiming.** Only one claim is allowed per `claimGap` (default 70ms), so 12 cursors depart one after another and read as a relay. **Cursors waiting in the queue must wait in place; they must not be sent off to wander** (a real early bug: only the first cursor won the claim in a frame, the other 11 were sent wandering, and the first screen took over 3.5s to build; ~2.0s after the fix).
+- **Grab point.** A random point inside the element, biased toward the top-left (capped at 180×70px), so the cursor holds "a corner of the element", not its center.
+- **Name tags.** Shown only while working (`.working`) or in Design view, so the screen does not fill with text.
 
-## 4. 同步:为什么光标不会脱离元素
+## 4. Sync: why the cursor never leaves its element
 
-拖拽期间,元素位移 `T` 与光标位置来自同一次计算,同一帧写入:
+During a drag, the element's offset `T` and the cursor's position come from the same calculation and are written in the same frame:
 
 ```js
-// 帧内顺序
-T = D * (1 - ease(progress))                       // 元素位移(D 是起点偏移)
-cursor = layoutRect.topLeft + grabOffset + T        // 光标 = 元素当前抓取点
-element.style.transform = translate3d(T)            // 同一帧写入
+// order within the frame
+T = D * (1 - ease(progress))                       // element offset (D is the spawn offset)
+cursor = layoutRect.topLeft + grabOffset + T        // cursor = the element's current grab point
+element.style.transform = translate3d(T)            // written in the same frame
 ```
 
-关键细节:
-- **`layoutRect` 必须是"最终布局位置"**,不是当前包围盒。读到的 `getBoundingClientRect()` 已包含我们自己施加的位移,所以要减掉:`fr.left = rect.left - appliedX`。位移只用平移(不旋转、不缩放),这个减法才精确。
-- **选框也用 `fr + 当前T`** 定位,而不是用本帧读到的矩形——本帧读到的是上一帧的位移,会落后一帧。
-- **拖拽时 `gk`(汇聚混合系数)强制为 0**,光标严格等于抓取点。
+Details that matter:
+- **`layoutRect` must be the "final layout position"**, not the current bounding box. The rect you read already contains the offset we applied, so subtract it: `fr.left = rect.left - appliedX`. This subtraction is only exact because offsets are pure translations (no rotation, no scale).
+- **The selection box is also positioned from `fr + current T`**, not from the rect read this frame. The rect read this frame still has the previous frame's offset and would lag by one frame.
+- **While dragging, `gk` (the gather blend factor) is forced to 0**, so the cursor is exactly the grab point.
 
-QA 脚本测的就是这个性质:拖拽期间,光标与元素抓取点的**真实 DOM 距离**。模板实测最大 0.07px(含滚轮滚动期间)。
+That is precisely what the QA script measures: the **real DOM distance** between cursor and grab point during a drag. The template measures 0.07px max, including during wheel scrolling.
 
-## 5. 坐标系:为什么覆盖层必须在文档空间
+## 5. Coordinates: why the overlay must be in document space
 
-这是最容易被忽略、也最影响"丝滑"的一点。
+This is the easiest thing to miss and the one with the biggest effect on smoothness.
 
-- 覆盖层若是 `position: fixed`(视口空间),滚动由**合成器线程**异步完成,而光标位置由**主线程**每帧计算。滚动时元素跟着合成器走,光标却要等主线程下一帧,于是**光标落后元素一帧的滚动量**,看上去光标在元素上"滑"。实测:这样做,边滚边拖时最大偏差达 70px。
-- 解法:覆盖层用 **`position: absolute`,放在 `body`(`position: relative`)里**,选框与光标按**文档坐标**(视口坐标 + `scrollY`)定位。光标和元素同处一个滚动层,相对位置只取决于拖拽进度,与滚动无关。实测偏差降到 0.07px。
+- If the overlay is `position: fixed` (viewport space), scrolling is done asynchronously on the **compositor thread**, while cursor positions are computed on the **main thread** every frame. Elements move with the compositor; cursors wait for the next main-thread frame. So **cursors lag by one frame of scroll** and appear to slide across the element. Measured: up to 70px of drift while scrolling and dragging.
+- The fix: put the overlay in **`position: absolute` inside `body` (`position: relative`)** and position boxes and cursors in **document coordinates** (viewport coordinates + `scrollY`). Cursor and element then live in the same scroll layer, and their relative position depends only on drag progress, independent of scrolling. Measured drift: 0.07px.
 
 ```css
 body{position:relative}
-#dl {position:absolute;inset:0;z-index:60;pointer-events:none;overflow:clip;contain:layout style}  /* 文档空间 */
-#dlf{position:fixed;inset:0;z-index:60;pointer-events:none;overflow:hidden}                         /* 仅给 fixed 节点的选框 */
+#dl {position:absolute;inset:0;z-index:60;pointer-events:none;overflow:clip;contain:layout style}  /* document space */
+#dlf{position:fixed;inset:0;z-index:60;pointer-events:none;overflow:hidden}                         /* boxes for fixed nodes only */
 ```
 ```js
 box.style.transform    = `translate3d(${fr.left+T.x}px, ${fr.top+T.y + (node.fixed ? 0 : sy)}px, 0)`;
-cursor.style.transform = `translate3d(${a.x}px, ${a.y + sy}px, 0)`;     // 内部仍用视口坐标,写入时加 scrollY
+cursor.style.transform = `translate3d(${a.x}px, ${a.y + sy}px, 0)`;     // viewport coords internally, scrollY added on write
 ```
-- `overflow: clip` 让飞出文档边缘的光标被裁掉,不会撑大页面。
-- **fixed 的节点**(顶栏、HUD)不随滚动,它们的选框放进 `#dlf`。这类节点只在加载时被拖入,期间滚动的概率很低,所以其光标仍在文档层,可接受。
+- `overflow: clip` crops cursors that fly beyond the document edge so they cannot enlarge the page.
+- **Fixed nodes** (top bar, HUD) do not scroll, so their boxes go into `#dlf`. They are only dragged in at load time, when scrolling is unlikely, so keeping their cursors in the document layer is acceptable.
 
-## 6. 起点怎么选(不溢出、不撑高页面)
+## 6. Choosing spawn points (no overflow, no page growth)
 
-元素的起点 = 最终位置 + 偏移 `D`(距离 150–300px,手机 70–140px,方向从 8 个候选里选)。候选要过滤:
+An element's spawn point = final position + offset `D` (150–300px desktop, 70–140px mobile, direction picked from 8 candidates). Candidates are filtered:
 
-| 过滤条件 | 原因 |
+| Filter | Why |
 |---|---|
-| 起点的左右边必须在视口内(非 fixed 元素) | 否则位移会产生横向可滚动溢出,在手机上撑宽布局视口 |
-| 向下偏移时,不能超出文档底部 | 否则位移会让文档变高,滚动范围跳动 |
-| 起点的纵向范围要与视口相交 | 起点要看得见 |
-| 全部被过滤时,回退为向上偏移 | 向上不会增加可滚动区域 |
+| Left and right edges must be inside the viewport (non-fixed elements) | Otherwise the offset creates horizontal scrollable overflow, which widens the mobile layout viewport |
+| A downward offset must not go below the bottom of the document | Otherwise the offset makes the document taller and the scroll range jumps |
+| The vertical span of the spawn point must intersect the viewport | The spawn point has to be visible |
+| If everything is filtered out, fall back to an upward offset | Upward never increases the scrollable area |
 
-另外 `main{overflow-x:clip}` 作为最后一道保险。
+Additionally, `main{overflow-x:clip}` acts as a last safety net.
 
-## 7. 底部汇聚
+## 7. Bottom gather
 
-页面末尾放一个"舞台"元素 `[data-gather]`(虚线框 + 四角手柄 + 文案)。它**不是**被拖入的节点,而是随汇聚进度淡入的静态元素。
+At the end of the page there is a "stage" element `[data-gather]` (dashed frame, four corner handles, a caption). It is **not** a dragged node; it is static and fades in with gather progress.
 
-**汇聚进度 `G` 由舞台自身的位置决定**,而不是距离页面底部的像素数:
-
-```js
-toBottom = DOCH - (scrollY + vh)                // 还要滚多远到底
-aFinal   = anchorY - toBottom                    // 滚到底时舞台中心将在的位置
-G = smooth(clamp((vh - anchorY) / (vh - aFinal), 0, 1))   // 舞台刚入屏 = 0,到达底部 = 1
-```
-这样汇聚在舞台**入屏时才开始**、恰好**到底时完成**,不依赖视口高度。若用"距底部 N 像素"来定,光标会提前飞向屏幕外的一个点。
-
-每个光标的汇聚系数 `gk` 带错开:
+**Gather progress `G` is determined by the stage's own position**, not by pixels from the bottom of the page:
 
 ```js
-stagger = smooth(clamp(G*1.35 - (i/n)*0.35, 0, 1))      // 一个接一个到达,而不是同时
-gk += (stagger - gk) * (1 - Math.exp(-dt*.22))            // 再平滑一次
-显示位置 = 工作位置 + (集群槽位 - 工作位置) * gk
+toBottom = DOCH - (scrollY + vh)                // how much further to the bottom
+aFinal   = anchorY - toBottom                    // where the stage center will be at the bottom
+G = smooth(clamp((vh - anchorY) / (vh - aFinal), 0, 1))   // stage just entered = 0, at bottom = 1
 ```
-- **槽位**用向日葵(phyllotaxis)排布:`半径 = spacing*√(i+0.6)`,角度 `i*2.39996`,整体缓慢自转并有轻微"呼吸",12 个光标聚成一团,最远的光标离中心约 50px。
-- 因为是**滚动驱动、连续的**,往回滚时光标会平滑散开,中途停住就停在中途。没有"触发"和"状态切换"的突兀。
-- **汇聚期间不再开始新拖拽**:`G > 0.6` 时,队列里剩下的元素直接 `instant()` 显示。
-- **刚散开(`gk` 还没衰减完)的光标不许认领**(`gk < 0.02`),否则开始拖拽时光标会被集群"拉"偏。
-- 全部 `gk > 0.96` 时给 `<body>` 加 `.gathered`:每个光标发一圈脉冲,舞台文案显示"N agents online · all synced",HUD 状态变 `synced`。
+This way the gather **starts when the stage enters the viewport** and **finishes exactly at the bottom**, independent of viewport height. If you used "N pixels from the bottom", cursors would fly toward a point off-screen.
 
-## 8. 参数表
+Each cursor's gather factor `gk` is staggered:
 
-| 参数 | 默认 | 含义 / 调节 |
+```js
+stagger = smooth(clamp(G*1.35 - (i/n)*0.35, 0, 1))      // arrive one after another, not all at once
+gk += (stagger - gk) * (1 - Math.exp(-dt*.22))            // then smooth once more
+displayPos = workPos + (clusterSlot - workPos) * gk
+```
+- **Slots** are laid out with phyllotaxis: `radius = spacing*√(i+0.6)`, angle `i*2.39996`, with slow overall rotation and a slight breathing motion. Twelve cursors form one clump, with the farthest about 50px from the center.
+- Because it is **scroll-driven and continuous**, cursors spread back out smoothly when you scroll up, and hold position if you stop midway. There is no trigger and no state switch.
+- **No new drags start while gathering**: when `G > 0.6`, the rest of the queue is shown with `instant()`.
+- **Cursors still easing out of the cluster (`gk` not yet decayed) may not claim** (`gk < 0.02`), otherwise the cluster pulls them off target when the drag starts.
+- When all `gk > 0.96`, `<body>` gets `.gathered`: each cursor emits a pulse ring, the stage caption reads "N agents online · all synced", and the HUD state becomes `synced`.
+
+## 8. Parameters
+
+| Parameter | Default | Meaning / tuning |
 |---|---|---|
-| `claimGap` | 70ms | 相邻两次认领的最小间隔。越小越"同时抓",越大越像接力 |
-| `fly.speed` | 1.5 px/ms | 光标飞向起点的速度;结果被夹在 `[min,max]` = 340–880ms |
-| `drag.hold` | 90ms | 抓取后的停顿,让人看清"抓住了" |
-| `drag.min/max` | 620–980ms | 拖拽时长,随距离增长(`480 + 距离×1.1`) |
-| `spawn.desktop / small` | 150–300 / 70–140px | 起点距最终位置有多远 |
-| `linger` | 450ms | 松手后选框保留多久 |
-| `wander / dwell` | 900–1900 / 250–900ms | 无任务时的闲逛与停留 |
-| `gatherSpacing` | 15px | 集群里光标的间距;越大越松 |
-| `agents / agentsSmall` | 12 / 7 | 光标数。实测首屏(11 个元素)搭完:桌面 12 个约 2.0 秒,手机 7 个约 2.2 秒 |
+| `claimGap` | 70ms | Minimum gap between claims. Smaller feels like simultaneous grabbing, larger like a relay |
+| `fly.speed` | 1.5 px/ms | Flight speed toward the spawn point; the result is clamped to `[min,max]` = 340–880ms |
+| `drag.hold` | 90ms | Pause after the grab, so the viewer sees "it has been grabbed" |
+| `drag.min/max` | 620–980ms | Drag duration, growing with distance (`480 + distance×1.1`) |
+| `spawn.desktop / small` | 150–300 / 70–140px | How far from its final position an element spawns |
+| `linger` | 450ms | How long the box stays after release |
+| `wander / dwell` | 900–1900 / 250–900ms | Idle wandering and dwelling |
+| `gatherSpacing` | 15px | Spacing between cursors in the cluster; larger is looser |
+| `agents / agentsSmall` | 12 / 7 | Cursor count. Measured: the first screen (11 elements) builds in ~2.0s with 12 desktop cursors, ~2.2s with 7 on mobile |
 
-拖拽的缓动 `1 - (1-p)^2.6`:起步快、落点慢,像手在"放下"东西。抓取前有 90ms 停顿,所以起步的"急"是合理的。
+The drag easing `1 - (1-p)^2.6`: fast start, slow landing, like a hand setting something down. There is a 90ms pause before the grab, so the quick start is justified.
 
-## 9. 变体
+## 9. Variants
 
-- **从工具栏"拉出"元素**:起点不是随机方向,而是固定从某个调色板图标处(例如屏幕左侧一排图标),光标从图标处抓起并拖到位。只需把 `pickSpawn` 换成返回"指向调色板"的偏移,并给调色板画个 UI。
-- **两个光标合力**:大元素(如 `.media`)派两个 agent,一个抓左上、一个抓右下,各自按自己的抓取点贴合。需要把 `n.agent` 改成数组,并让两者共享同一个 `T`。
-- **拖拽结尾的"吸附"**:最后 8% 进度加一个很小的过冲回弹(≤4px)。注意要让光标同样回弹,否则同步会破。
-- **汇聚后做点什么**:到齐时让光标排成一圈、全部指向舞台中心的按钮,或者轮流在舞台内"打字"。槽位函数是纯函数,换成别的排布即可。
+- **Pulling elements out of a toolbar.** Instead of a random direction, spawn points always point at a palette icon (for example a column of icons on the left of the screen); the cursor picks the element up from the icon and drags it into place. Only `pickSpawn` needs to return an icon-directed offset, plus a palette UI.
+- **Two cursors cooperating.** For large elements (like `.media`), assign two agents, one on the top-left and one on the bottom-right, each hugging its own grab point. `n.agent` becomes an array and both share the same `T`.
+- **Snap at the end of a drag.** Add a tiny overshoot and settle in the last 8% of progress (≤4px). Make the cursor follow the same overshoot, or sync breaks.
+- **Do something after gathering.** When everyone arrives, have the cursors form a ring and point at a button in the center of the stage, or take turns "typing" inside it. The slot function is pure; swap in any other arrangement.
 
-## 10. 踩过的坑
+## 10. Pitfalls
 
-- **同一帧多个光标争一个认领名额**:排队的光标必须原地等,不能去闲逛(见第 3 节)。
-- **闲逛不可打断**:新元素排队 2 秒还没人理。闲逛片段必须带 `idle` 标记并可被打断。
-- **滚动时光标滑动**:覆盖层必须在文档空间(见第 5 节)。
-- **拖拽开头光标偏移**:被集群拉着的光标(`gk>0`)认领后会偏。认领前要求 `gk<0.02`,拖拽时强制 `gk=0`。
-- **CSS 里给节点写 `transform`**:会被 JS 的 `transform` 覆盖。居中之类请用 `margin:auto` / `inset`,不要用 `translate(-50%,-50%)`。模板里的 3D 容器与 HUD 都因此改过。
-- **位移造成溢出**:见第 6 节。
-- **误用 `p95` 判断流畅**:帧间隔是量化的(16.7 / 33.3ms),一帧抖动就让 p95 翻倍。看"慢帧占比"和最大值。
-- **失败保底别误伤**:5 秒保底揭示只能在"主循环从未启动"时触发;若无条件触发,会把还没滚到的元素全部直接显示,拖拽就没了。
+- **Several cursors competing for one claim slot in a frame.** Queued cursors must wait where they are, not wander (see section 3).
+- **Wandering that cannot be interrupted.** A new element waits 2 seconds with nobody attending it. Wander segments must carry an `idle` flag and be interruptible.
+- **Cursors sliding during scroll.** The overlay must be in document space (see section 5).
+- **Cursor drifting at the start of a drag.** A cursor still held by the cluster (`gk>0`) drifts after claiming. Require `gk<0.02` before claiming and force `gk=0` while dragging.
+- **Writing `transform` on a node in CSS.** It gets overwritten by JS. Center with `margin:auto` / `inset`, not `translate(-50%,-50%)`. The 3D container and the HUD were both changed for this reason.
+- **Offsets causing overflow.** See section 6.
+- **Using `p95` to judge smoothness.** Frame intervals are quantized (16.7 / 33.3ms), so a single stutter doubles p95. Look at the slow-frame share and the maximum.
+- **Breaking the failure fallback.** The 5-second fallback reveal must only fire if the main loop never started; firing unconditionally reveals every element that has not been scrolled to yet, and the drag-in is gone.
