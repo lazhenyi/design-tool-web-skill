@@ -1,0 +1,691 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Northbeam — Systems that hold up</title>
+<meta name="description" content="An independent engineering studio. Architecture, backend systems and infrastructure for software that has to keep working.">
+<meta name="color-scheme" content="dark">
+<script>document.documentElement.classList.add('js')</script>
+<style>
+/* ==========================================================================
+   design-tool-web starter
+   Layers (bottom → top):  content DOM  →  #dl design overlay (boxes + agents)
+                           →  #scan sweep line  →  #hud toolbar
+   Tune the look with the tokens below; tune the motion in CONFIG (script).
+   ========================================================================== */
+:root{
+  color-scheme: dark;
+  --bg:#07080b; --bg2:#0c0e14; --fg:#f2f4f8; --muted:#8a91a0; --line:#1c2230;
+  --blue:#2f6bff; --blue-soft:rgba(47,107,255,.14); --gold:#ffb62e; --red:#ff3b30;
+  --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", "PingFang SC", "Noto Sans CJK SC", sans-serif;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  --ease: cubic-bezier(.2,.7,.1,1);
+  --pad: clamp(20px, 5vw, 72px);
+}
+*,*::before,*::after{box-sizing:border-box}
+html{background:var(--bg);scroll-padding-top:72px}
+@media (prefers-reduced-motion:no-preference){html{scroll-behavior:smooth}}
+body{
+  position:relative;margin:0;color:var(--fg);font:400 16px/1.55 var(--sans);
+  background:
+    radial-gradient(900px 600px at 78% -10%, rgba(47,107,255,.10), transparent 60%),
+    var(--bg);
+  -webkit-font-smoothing:antialiased;overflow-x:hidden;
+}
+a{color:inherit;text-decoration:none}
+button{font:inherit;color:inherit;cursor:pointer}
+
+/* ---------- content layer ---------- */
+header.top{
+  position:fixed;inset:0 0 auto 0;z-index:30;display:flex;align-items:center;justify-content:space-between;
+  padding:calc(14px + env(safe-area-inset-top,0px)) var(--pad) 14px;
+  background:linear-gradient(var(--bg) 20%, transparent);
+}
+.logo{display:flex;align-items:center;gap:10px;font-weight:700;letter-spacing:-.02em}
+.logo i{width:20px;height:20px;border-radius:6px;background:linear-gradient(135deg,var(--blue),#7aa2ff);display:block}
+nav.main{display:flex;gap:clamp(14px,3vw,34px);font-size:13px;color:#cdd3e0}
+nav.main a:hover{color:#fff}
+@media (max-width:440px){nav.main{gap:14px;font-size:12px}nav.main a:nth-child(2){display:none}}
+
+section{position:relative;min-height:100svh;padding:120px var(--pad) 90px;display:flex;flex-direction:column;justify-content:center}
+/* boxes are measured from the DOM: let blocks shrink-wrap their content so the selection hugs the text */
+section > [data-node]{align-self:flex-start}
+h1[data-node],h2[data-node],h3[data-node]{width:fit-content;max-width:100%}
+.eyebrow{font:500 11px/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--gold);display:inline-block}
+h1,h2{margin:0;font-weight:700;letter-spacing:-.045em;line-height:.98}
+h1{font-size:clamp(46px,9vw,120px)}
+h2{font-size:clamp(34px,6vw,76px)}
+h1 em,h2 em{font-style:normal;color:#8a91a0}
+.lead{max-width:46ch;color:#b5bccb;font-size:clamp(15px,1.4vw,18px);margin:26px 0 0}
+.row{display:flex;flex-wrap:wrap;gap:12px;margin-top:34px}
+.btn{display:inline-flex;align-items:center;height:46px;padding:0 22px;border-radius:10px;font-weight:600;font-size:14px;border:1px solid #2a3142}
+.btn.primary{background:#f2f4f8;color:#07080b;border-color:#f2f4f8}
+.btn.ghost{background:transparent}
+
+/* hero 3D */
+#hero{isolation:isolate;overflow-x:clip}                       /* stacking context keeps the 3D canvas behind the text; overflow-x:clip stops it widening the mobile layout viewport */
+.hero-3d{position:absolute;z-index:-1;right:max(var(--pad),2vw);top:0;bottom:0;margin-block:auto;width:min(44vw,540px);height:min(44vw,540px);pointer-events:none}
+.hero-3d canvas{width:100%;height:100%;display:block}
+.hero-3d .fallback{display:none;position:absolute;inset:14%;border-radius:50%;
+  background:radial-gradient(circle at 35% 35%,#7aa2ff,var(--blue) 45%,transparent 70%),
+             radial-gradient(circle at 70% 70%,rgba(255,182,46,.6),transparent 40%);filter:blur(2px)}
+.no-webgl .hero-3d .fallback{display:block}
+@media (max-width:820px){.hero-3d{width:70vw;height:70vw;top:auto;bottom:6vh;margin-block:0;right:-6vw;opacity:.55}}
+
+/* stats */
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:28px;margin-top:64px;max-width:760px}
+.stat b{display:block;font:600 clamp(30px,4vw,48px)/1 var(--sans);letter-spacing:-.04em;font-variant-numeric:tabular-nums}
+.stat span{font:500 11px/1.6 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+
+/* work */
+.work{display:grid;gap:0;margin-top:56px;border-top:1px solid var(--line)}
+.proj{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);gap:28px;align-items:center;padding:34px 0;border-bottom:1px solid var(--line)}
+.proj h3{margin:10px 0 8px;font-size:clamp(26px,3.6vw,44px);letter-spacing:-.04em;line-height:1}
+.proj p{margin:0;color:#aab1c1;max-width:48ch}
+.media{aspect-ratio:16/10;border-radius:14px;border:1px solid var(--line);
+  background:
+    linear-gradient(transparent 31px, rgba(255,255,255,.04) 32px) 0 0/100% 32px,
+    linear-gradient(90deg, transparent 31px, rgba(255,255,255,.04) 32px) 0 0/32px 100%,
+    linear-gradient(135deg,#10162a,#0a0d17)}
+@media (max-width:820px){.proj{grid-template-columns:1fr}}
+
+/* practice */
+.cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:34px;margin-top:56px}
+.col h4{margin:0 0 10px;font-size:19px;letter-spacing:-.02em}
+.col p{margin:0;color:#aab1c1;font-size:15px}
+
+/* contact */
+.contact-card{max-width:980px;padding:clamp(22px,4vw,56px);border:1px solid var(--line);border-radius:18px;background:linear-gradient(180deg,rgba(255,255,255,.025),transparent)}
+.mail{display:flex;gap:10px;flex-wrap:wrap;margin-top:34px}
+.mail input{flex:1 1 260px;height:48px;padding:0 16px;border-radius:10px;border:1px solid #2a3142;background:#0b0e16;color:var(--fg);font:500 14px var(--mono)}
+.mail input:focus-visible,.btn:focus-visible,#hud button:focus-visible,nav a:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+/* the stage where every agent cursor converges at the bottom of the page */
+.gather{position:relative;height:clamp(240px,34vh,340px);margin:0 var(--pad) 10px}
+.gather-frame{position:absolute;inset:0;border:1px dashed rgba(47,107,255,.6);border-radius:18px;opacity:0;
+  background:radial-gradient(60% 80% at 50% 50%,rgba(47,107,255,.12),transparent 70%)}
+.gather-frame i{position:absolute;width:7px;height:7px;background:#fff;border:1px solid var(--blue)}
+.gather-frame i:nth-child(1){left:-4px;top:-4px}.gather-frame i:nth-child(2){right:-4px;top:-4px}
+.gather-frame i:nth-child(3){left:-4px;bottom:-4px}.gather-frame i:nth-child(4){right:-4px;bottom:-4px}
+.gather-chip{position:absolute;left:0;right:0;bottom:18px;text-align:center;font:500 11px/1 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:#9fb4e8;opacity:0}
+.gather-chip b{color:#fff}
+html:not(.js) .gather-frame,html:not(.js) .gather-chip{opacity:1}
+footer{padding:40px var(--pad) 120px;color:var(--muted);font:500 12px var(--mono);display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap;border-top:1px solid var(--line)}
+
+/* ---------- reveal states (progressive enhancement) ----------
+   Elements start invisible. An agent cursor grabs each one, JS moves it with transform
+   (translate only, no blur/filter: filter animations are the usual cause of jank). */
+.js [data-node]{opacity:0}
+.js [data-node].in{opacity:1;transition:opacity .1s linear}
+.js.reveal-all [data-node]{opacity:1!important;transform:none!important}
+main{overflow-x:clip}                      /* a dragged element may never widen the page */
+
+/* ---------- glitch slice (pseudo-elements carry a copy of the text) ---------- */
+[data-glitch]{position:relative}
+[data-glitch].glitching::before,[data-glitch].glitching::after{
+  content:attr(data-text);position:absolute;inset:0;pointer-events:none;white-space:pre-wrap;font:inherit;letter-spacing:inherit;line-height:inherit}
+[data-glitch].glitching::before{color:#5b8cff;animation:gl1 .56s steps(2,end) both}
+[data-glitch].glitching::after{color:var(--red);mix-blend-mode:screen;animation:gl2 .56s steps(2,end) both}
+@keyframes gl1{
+  0%{clip-path:inset(8% 0 72% 0);transform:translateX(-8px)}
+  25%{clip-path:inset(58% 0 12% 0);transform:translateX(6px)}
+  50%{clip-path:inset(30% 0 44% 0);transform:translateX(-4px)}
+  75%{clip-path:inset(76% 0 4% 0);transform:translateX(3px)}
+  100%{clip-path:inset(0 0 100% 0);transform:none}}
+@keyframes gl2{
+  0%{clip-path:inset(64% 0 10% 0);transform:translateX(7px)}
+  30%{clip-path:inset(12% 0 66% 0);transform:translateX(-6px)}
+  60%{clip-path:inset(46% 0 30% 0);transform:translateX(4px)}
+  100%{clip-path:inset(100% 0 0 0);transform:none}}
+
+/* ---------- design overlay ---------- */
+/* Overlay in DOCUMENT space: it scrolls with the content on the compositor, so a cursor can never lag the element it
+   carries while the page scrolls. #dlf (viewport space) only holds boxes for the fixed header/HUD. */
+#dl{position:absolute;inset:0;z-index:60;pointer-events:none;overflow:clip;contain:layout style}
+#dlf{position:fixed;inset:0;z-index:60;pointer-events:none;overflow:hidden;contain:layout style}
+.sel{position:absolute;left:0;top:0;border:1px solid var(--blue);background:var(--blue-soft);opacity:0;transition:opacity .18s linear}
+.sel.on{opacity:1}
+.sel.ghost{border-style:dashed;background:transparent}      /* where an agent is about to place something */
+.sel .h{position:absolute;width:7px;height:7px;background:#fff;border:1px solid var(--blue)}
+.sel .tl{left:-4px;top:-4px}.sel .tr{right:-4px;top:-4px}.sel .bl{left:-4px;bottom:-4px}.sel .br{right:-4px;bottom:-4px}
+.sel .dim{position:absolute;left:50%;top:100%;transform:translate(-50%,8px);padding:2px 6px;border-radius:4px;background:var(--blue);color:#fff;font:600 10px/1.4 var(--mono);white-space:nowrap}
+.cur{position:absolute;left:0;top:0;will-change:transform}
+.cur svg{display:block;filter:drop-shadow(0 1px 2px rgba(0,0,0,.5))}
+.cur span{position:absolute;left:14px;top:14px;padding:1px 6px;border-radius:4px;color:#07080b;font:700 10px/1.5 var(--mono);white-space:nowrap;opacity:0;transform:scale(.9);transition:opacity .15s,transform .15s}
+.cur.working span,body.design .cur span{opacity:1;transform:none}
+.cur svg{transition:transform .08s ease-out}
+.cur.grab svg{transform:scale(1.2)}
+.cur .ring{position:absolute;left:-10px;top:-10px;width:22px;height:22px;border-radius:50%;border:2px solid currentColor;opacity:0}
+#scan{position:fixed;top:0;bottom:0;left:0;width:2px;z-index:45;background:var(--red);box-shadow:0 0 14px 2px rgba(255,59,48,.65);opacity:0;pointer-events:none}
+
+/* ---------- HUD toolbar ---------- */
+#hud{position:fixed;left:0;right:0;margin-inline:auto;width:fit-content;bottom:calc(16px + env(safe-area-inset-bottom,0px));z-index:50;
+  display:flex;align-items:center;gap:12px;padding:8px 10px 8px 14px;border-radius:14px;
+  background:rgba(14,17,25,.82);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1px solid #232a3b;
+  font:500 11px/1 var(--mono);color:#aeb6c8;white-space:nowrap;max-width:calc(100vw - 24px)}
+#hud .dots{display:flex;gap:4px}
+#hud .dots i{width:8px;height:8px;border-radius:50%;display:block}
+#hud b{color:#fff;font-weight:600}
+#hud .state{color:#7f8aa6;min-width:5.2em}
+#hud .sep{width:1px;height:16px;background:#2a3142}
+#hud button{height:28px;padding:0 10px;border-radius:8px;border:1px solid #2a3142;background:#121724;font:600 11px var(--mono)}
+#hud button[aria-pressed="true"]{background:var(--blue);border-color:var(--blue);color:#fff}
+@media (max-width:560px){#hud .layers,#hud .sep,#hud .dots{display:none}#hud{gap:10px;padding-left:12px}}
+
+@media (prefers-reduced-motion:reduce){
+  .js [data-node]{opacity:1}
+  #scan{display:none}
+  .gather-frame,.gather-chip{opacity:1}
+}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <a class="logo" data-node href="#top" aria-label="Northbeam home"><i></i>Northbeam</a>
+  <nav class="main" data-node aria-label="Primary">
+    <a href="#work">Work</a><a href="#practice">Practice</a><a href="#contact">Contact</a>
+  </nav>
+</header>
+
+<main id="top">
+  <!-- 1 · HERO -->
+  <section data-build id="hero">
+    <div class="hero-3d" id="hero3d" data-node aria-hidden="true"><div class="fallback"></div></div>
+    <span class="eyebrow" data-node data-scramble>Independent engineering studio</span>
+    <h1 data-node data-glitch style="margin-top:22px">Systems that<br><em>hold up.</em></h1>
+    <p class="lead" data-node>Northbeam designs and builds the technical foundations behind useful software: architecture, backend systems, cloud infrastructure and data flows.</p>
+    <div class="row" data-node>
+      <a class="btn primary" href="#contact">Start a conversation</a>
+      <a class="btn ghost" href="#work">See the work</a>
+    </div>
+    <div class="stats">
+      <div class="stat" data-node><b data-count="2019">0</b><span>Founded</span></div>
+      <div class="stat" data-node><b data-count="38">0</b><span>Systems shipped</span></div>
+      <div class="stat" data-node><b data-count="99.9" data-dec="1" data-suffix="%">0</b><span>Typical uptime</span></div>
+    </div>
+  </section>
+
+  <!-- 2 · WORK -->
+  <section data-build id="work">
+    <span class="eyebrow" data-node data-scramble>Selected work</span>
+    <h2 data-node data-glitch style="margin-top:18px">Proof lives in<br><em>what we run.</em></h2>
+    <div class="work">
+      <article class="proj">
+        <div>
+          <span class="eyebrow" data-node data-scramble>Logistics · Live tracking</span>
+          <h3 data-node data-glitch>Harborline</h3>
+          <p data-node>A real-time fleet tracker that keeps operators oriented when networks drop and data arrives late.</p>
+        </div>
+        <div class="media" data-node role="img" aria-label="Harborline interface placeholder"></div>
+      </article>
+      <article class="proj">
+        <div>
+          <span class="eyebrow" data-node data-scramble>Healthcare · Design system</span>
+          <h3 data-node data-glitch>Clinic UI</h3>
+          <p data-node>Reusable components for clinical workflows, with explicit data contracts and clear integration boundaries.</p>
+        </div>
+        <div class="media" data-node role="img" aria-label="Clinic UI interface placeholder"></div>
+      </article>
+      <article class="proj">
+        <div>
+          <span class="eyebrow" data-node data-scramble>Open data · Observatory</span>
+          <h3 data-node data-glitch>Fumarole</h3>
+          <p data-node>A focused observatory that turns raw sensor feeds into an interactive, citable map.</p>
+        </div>
+        <div class="media" data-node role="img" aria-label="Fumarole interface placeholder"></div>
+      </article>
+    </div>
+  </section>
+
+  <!-- 3 · PRACTICE -->
+  <section data-build id="practice">
+    <span class="eyebrow" data-node data-scramble>Practice</span>
+    <h2 data-node data-glitch style="margin-top:18px">We build systems,<br><em>not just software.</em></h2>
+    <div class="cols">
+      <div class="col" data-node><h4>Software architecture</h4><p>Boundaries, data models and failure modes decided early, written down, and kept honest.</p></div>
+      <div class="col" data-node><h4>Backend &amp; data</h4><p>APIs, queues and pipelines that stay boring under load and easy to reason about at 3&nbsp;a.m.</p></div>
+      <div class="col" data-node><h4>Cloud &amp; delivery</h4><p>Infrastructure as code, observable by default, with releases your team can run without us.</p></div>
+    </div>
+  </section>
+
+  <!-- 4 · CONTACT -->
+  <section data-build id="contact">
+    <div class="contact-card">
+      <span class="eyebrow" data-node data-scramble>Contact</span>
+      <h2 data-node data-glitch style="margin-top:18px">Have a difficult system<br>to think through?</h2>
+      <p class="lead" data-node>Talk to Northbeam about architecture, infrastructure, or the next useful thing to build.</p>
+      <form class="mail" data-node onsubmit="event.preventDefault();location.href='mailto:'+encodeURIComponent(this.email.value||'hello@example.com')">
+        <input name="email" type="email" placeholder="hello@example.com" aria-label="Email address" autocomplete="email">
+        <button class="btn primary" type="submit">Say hello</button>
+      </form>
+    </div>
+  </section>
+
+  <!-- 5 · STAGE: every agent cursor ends up here when you reach the bottom -->
+  <div class="gather" data-gather aria-hidden="true">
+    <div class="gather-frame"><i></i><i></i><i></i><i></i></div>
+    <div class="gather-chip"><b id="gatherN">0</b> agents online · all synced</div>
+  </div>
+</main>
+
+<footer>
+  <span>© 2026 Northbeam — independent engineering</span>
+  <span>Built as a living design file.</span>
+</footer>
+
+<!-- overlay + effects -->
+<div id="dl" aria-hidden="true"></div>
+<div id="dlf" aria-hidden="true"></div>
+<div id="scan" aria-hidden="true"></div>
+<div id="hud" data-node role="toolbar" aria-label="Design layer controls">
+  <span class="dots" id="hudDots" aria-hidden="true"></span>
+  <span><b id="nAgents">0</b> agents</span>
+  <span class="layers"><b id="nLayers">0</b> layers</span>
+  <span class="state" id="hudState">booting</span>
+  <span class="sep"></span>
+  <button id="btnDesign" type="button" aria-pressed="false" title="Toggle design view (D)">Design</button>
+  <button id="btnReplay" type="button" title="Replay the build (R)">Replay</button>
+</div>
+
+<!-- Pinned three.js (cdnjs is on the CSP allow-list for published pages). Page works without it. -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(() => {
+'use strict';
+
+/* ============================== CONFIG ==============================
+   Every piece of UI is carried into place by an agent cursor:
+   claim → fly to the spawn point → grab → drag to the final position → release.
+   At the bottom of the page all cursors converge on the stage (.gather).            */
+const CONFIG = {
+  agents: [                       // name tag + colour. Order = priority on small screens.
+    {name:'layout', color:'#ff5d73'}, {name:'type',   color:'#ffb62e'},
+    {name:'motion', color:'#35d6a0'}, {name:'3d',     color:'#5b8cff'},
+    {name:'copy',   color:'#c77dff'}, {name:'a11y',   color:'#4cc9f0'},
+    {name:'perf',   color:'#ff9f1c'}, {name:'qa',     color:'#7bd88f'},
+    {name:'color',  color:'#f15bb5'}, {name:'seo',    color:'#9bf6ff'},
+    {name:'build',  color:'#ffd166'}, {name:'deploy', color:'#ef476f'}
+  ],
+  agentsSmall: 7,                 // cursor count when viewport < 720px
+  claimGap: 70,                   // ms between two agents picking up new elements (reads as a cascade)
+  fly:   {speed: 1.5, min: 340, max: 880},   // agent → spawn point: px per ms, clamped to [min,max] ms
+  drag:  {hold: 90, min: 620, max: 980},     // grab pause, then drag duration range (ms)
+  spawn: {desktop: [150, 300], small: [70, 140]},  // how far from its final place an element is spawned (px)
+  linger: 450,                    // ms the selection box stays after release
+  wander: [900, 1900], dwell: [250, 900],    // idle behaviour between jobs
+  gatherSpacing: 15,              // px between cursors in the final cluster
+  scanMs: 900
+};
+
+/* ============================== helpers ============================= */
+const $  = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
+const rnd = (a, b) => a + Math.random() * (b - a);
+const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+const smooth = p => p * p * (3 - 2 * p);
+const easeInOut = p => p < .5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2;
+const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const small = innerWidth < 720;
+const dl = $('#dl'), dlf = $('#dlf');
+let started = false;
+// Failsafe: if the loop never starts (a script error), never leave the page invisible.
+setTimeout(() => { if (!started) document.documentElement.classList.add('reveal-all'); }, 5000);
+
+/* ============================== nodes =============================== */
+// state: hidden → queued → claimed → drag → done        T = current translate (what JS applies)
+const nodes = $$('[data-node]').map(el => ({
+  el, state: 'hidden', box: null, shown: false, ghost: false, gh: false, until: 0, w: -1, h: -1,
+  fixed: !!el.closest('header.top, #hud'), vis: false, inView: false,
+  fr: {left: 0, top: 0, width: 0, height: 0},      // FINAL layout rect (measured minus the transform we applied)
+  T: {x: 0, y: 0}, ax: 0, ay: 0, D: {x: 0, y: 0},  // applied / spawn displacement
+  gx: 0, gy: 0, dragStart: 0, dragDur: 0, agent: null
+}));
+$('#nLayers').textContent = nodes.length;
+
+function makeBox(fixed) {
+  const b = document.createElement('div');
+  b.className = 'sel';
+  b.innerHTML = '<i class="h tl"></i><i class="h tr"></i><i class="h bl"></i><i class="h br"></i><span class="dim"></span>';
+  (fixed ? dlf : dl).appendChild(b);
+  return b;
+}
+
+/* ============================== text FX ============================= */
+function scramble(el) {
+  const final = el.textContent, glyphs = '▮▯░▒▓/\\<>_-+*#01', t0 = performance.now(), dur = 650;
+  (function step(now) {
+    const p = Math.min(1, (now - t0) / dur);
+    el.textContent = Array.from(final).map((c, i) => (c === ' ' || i < p * final.length) ? c : glyphs[(Math.random() * glyphs.length) | 0]).join('');
+    if (p < 1) requestAnimationFrame(step); else el.textContent = final;
+  })(t0);
+}
+function countUp(el) {
+  const to = parseFloat(el.dataset.count), dec = +(el.dataset.dec || 0), suf = el.dataset.suffix || '', t0 = performance.now(), dur = 1100;
+  (function step(now) {
+    const p = Math.min(1, (now - t0) / dur), e = 1 - Math.pow(1 - p, 3);
+    el.textContent = (to * e).toFixed(dec) + suf;
+    if (p < 1) requestAnimationFrame(step);
+  })(t0);
+}
+function reveal(n) {                       // runs the moment an agent grabs the element
+  const el = n.el;
+  if (el.classList.contains('in')) return;
+  el.classList.add('in');
+  const counters = $$('[data-count]', el).concat(el.dataset.count !== undefined ? [el] : []);
+  if (RM) { counters.forEach(c => { c.textContent = (+c.dataset.count).toFixed(+(c.dataset.dec || 0)) + (c.dataset.suffix || ''); }); return; }
+  counters.forEach(countUp);
+  if (el.dataset.glitch !== undefined) {
+    el.dataset.text = el.innerText.replace(/[ \t]+/g, ' ').trim();
+    el.classList.add('glitching');
+    setTimeout(() => el.classList.remove('glitching'), 580);
+  }
+  if (el.dataset.scramble !== undefined) scramble(el);
+}
+
+/* ============================== scan sweep ========================== */
+const scan = $('#scan');
+let lastSweep = -1e9;
+function sweep() {
+  if (RM || !scan.animate) return;
+  scan.animate(
+    [{transform: 'translateX(0)', opacity: 0}, {opacity: 1, offset: .1}, {opacity: 1, offset: .85}, {transform: `translateX(${innerWidth}px)`, opacity: 0}],
+    {duration: CONFIG.scanMs, easing: 'cubic-bezier(.6,0,.2,1)'}
+  );
+}
+
+/* ============================== agents ============================== */
+function edgePoint() {
+  const vw = innerWidth, vh = innerHeight, s = (Math.random() * 3) | 0;
+  return s === 0 ? {x: -40, y: rnd(vh * .2, vh)} : s === 1 ? {x: vw + 40, y: rnd(vh * .2, vh)} : {x: rnd(0, vw), y: vh + 60};
+}
+const agentCount = RM ? 0 : (small ? CONFIG.agentsSmall : CONFIG.agents.length);
+const agents = CONFIG.agents.slice(0, agentCount).map((a, i) => {
+  const el = document.createElement('div');
+  el.className = 'cur';
+  el.style.color = a.color;
+  el.innerHTML = `<i class="ring"></i><svg width="17" height="17" viewBox="0 0 18 18" aria-hidden="true"><path d="M2 1l13 7-5.5 1.6L7 15z" fill="${a.color}" stroke="rgba(0,0,0,.55)" stroke-width=".9" stroke-linejoin="round"/></svg><span style="background:${a.color}">${a.name}</span>`;
+  dl.appendChild(el);
+  const p = edgePoint();
+  return {el, ring: el.firstChild, cfg: a, i, wx: p.x, wy: p.y, x: p.x, y: p.y, s: null, dwellUntil: 0, job: null, gk: 0, ph: rnd(0, 6.28)};
+});
+$('#nAgents').textContent = agents.length;
+$('#gatherN').textContent = agents.length;
+const dots = $('#hudDots');
+CONFIG.agents.slice(0, Math.max(agents.length, 1)).forEach(a => { const i = document.createElement('i'); i.style.background = a.color; dots.appendChild(i); });
+const pulse = a => { if (a.ring.animate) a.ring.animate([{transform: 'scale(.3)', opacity: .9}, {transform: 'scale(1.7)', opacity: 0}], {duration: 460, easing: 'ease-out'}); };
+
+/* ---- motion segments: time-based, eased, slightly curved (no springs → no overshoot, no jitter) ---- */
+function seg(a, t, dur, tgt, ease, arc, done, idle) { a.s = {x0: a.wx, y0: a.wy, t0: t, dur, tgt, ease, arc, done, idle: !!idle}; }
+
+/* ============================== the job pipeline ==================== */
+const queue = [];
+let lastClaim = 0, G = 0, ANCHOR = {x: 0, y: 0}, DOCH = 0, DESIGN = false;
+
+function instant(n) { n.state = 'done'; reveal(n); }     // used when an element is already gone / we're at the bottom
+
+function pickSpawn(n) {
+  const vw = innerWidth, vh = innerHeight, fr = n.fr, sy = scrollY;
+  const [d0, d1] = small ? CONFIG.spawn.small : CONFIG.spawn.desktop, dist = rnd(d0, d1);
+  const dirs = [[-1, 0], [1, 0], [0, -1], [0, 1], [-.7, -.7], [.7, -.7], [-.7, .7], [.7, .7]], ok = [];
+  for (const [ux, uy] of dirs) {
+    const dx = ux * dist, dy = uy * dist, l = fr.left + dx, r = l + fr.width, top = fr.top + dy;
+    if (!n.fixed && (l < 0 || r > vw)) continue;                         // never spawn sideways out of the page → no horizontal overflow
+    if (!n.fixed && dy > 0 && fr.top + fr.height + sy + dy > DOCH - 4) continue;   // never grow the document from below
+    if (top + fr.height < -20 || top > vh) continue;                     // spawn point stays on screen
+    ok.push({x: dx, y: dy});
+  }
+  return ok.length ? ok[(Math.random() * ok.length) | 0] : {x: 0, y: -dist * .6};
+}
+
+function claim(a, t) {
+  queue.sort((p, q) => p.fr.top - q.fr.top || p.fr.left - q.fr.left);   // top of the screen first
+  const n = queue.shift();
+  lastClaim = t;
+  if (!n.inView) { instant(n); return; }                                // scrolled away while waiting
+  if (t - lastSweep > 1800) { lastSweep = t; sweep(); }
+  n.state = 'claimed'; n.agent = a; a.job = n;
+  n.D = pickSpawn(n); n.T.x = n.D.x; n.T.y = n.D.y; n.ghost = true;     // invisible, but its dashed frame shows where it will start
+  n.el.style.willChange = 'transform';
+  n.gx = Math.min(n.fr.width * rnd(.18, .5), 180);                      // where on the element the agent grabs it
+  n.gy = Math.min(n.fr.height * rnd(.22, .55), 70);
+  a.el.classList.add('working');
+  const tgt = () => ({x: n.fr.left + n.gx + n.T.x, y: n.fr.top + n.gy + n.T.y});
+  const p0 = tgt(), dist = Math.hypot(p0.x - a.wx, p0.y - a.wy), k = small ? .85 : 1;
+  seg(a, t, clamp(dist / CONFIG.fly.speed, CONFIG.fly.min, CONFIG.fly.max) * k, tgt, easeInOut, rnd(-.16, .16), tt => grab(a, tt));
+}
+
+function grab(a, t) {
+  const n = a.job;
+  n.state = 'drag'; n.ghost = false;
+  reveal(n);
+  n.dragStart = t + CONFIG.drag.hold;
+  const dist = Math.hypot(n.D.x, n.D.y);
+  n.dragDur = clamp(480 + dist * 1.1, CONFIG.drag.min, CONFIG.drag.max) * (small ? .85 : 1);
+  a.el.classList.add('grab'); pulse(a);
+}
+
+function finish(n, t) {
+  n.state = 'done';
+  n.until = Math.max(n.until, t + CONFIG.linger);
+  n.el.style.willChange = '';
+  const a = n.agent;
+  if (a) {
+    a.job = null; a.dwellUntil = t + rnd(120, 320);
+    a.el.classList.remove('grab'); pulse(a);
+    setTimeout(() => a.el.classList.remove('working'), 550);
+  }
+}
+
+function wander(a, t) {
+  const pool = nodes.filter(n => n.state === 'done' && n.vis && !n.fixed);
+  let pick, node = null;
+  if (pool.length && Math.random() < .7) {
+    node = pool[(Math.random() * pool.length) | 0];
+    const u = rnd(.1, .9), v = rnd(.2, .8);
+    pick = () => ({x: node.r.left + node.r.width * u, y: node.r.top + node.r.height * v});
+  } else {
+    const px = rnd(.08, .92), py = rnd(.15, .85);
+    pick = () => ({x: innerWidth * px, y: innerHeight * py});
+  }
+  seg(a, t, rnd(...CONFIG.wander), pick, easeInOut, rnd(-.2, .2), tt => {
+    a.dwellUntil = tt + rnd(...CONFIG.dwell);
+    if (node && Math.random() < .4) { node.until = Math.max(node.until, tt + 700); pulse(a); }
+  }, true);                                          // idle=true: this move may be interrupted by new work
+}
+
+function stepAgent(a, t) {
+  // New work beats wandering: an idle agent drops what it is doing and takes the next element.
+  // Agents take turns (claimGap) so the cascade is visible instead of 12 grabbing at once.
+  if (!a.job && a.gk < .02 && G < .6 && queue.length && (!a.s || a.s.idle) && t - lastClaim > CONFIG.claimGap) claim(a, t);
+  const n = a.job;
+  if (n && n.state === 'drag') {                     // glued to the element: same T, same frame
+    a.wx = n.fr.left + n.gx + n.T.x; a.wy = n.fr.top + n.gy + n.T.y;
+  } else if (a.s) {
+    const s = a.s, p = clamp((t - s.t0) / s.dur, 0, 1), tg = s.tgt(), e = s.ease(p);
+    const dx = tg.x - s.x0, dy = tg.y - s.y0, k = s.arc * Math.sin(Math.PI * e);
+    a.wx = s.x0 + dx * e - dy * k; a.wy = s.y0 + dy * e + dx * k;
+    if (p >= 1) { a.s = null; if (s.done) s.done(t); }
+  } else if (!n && t >= a.dwellUntil) {
+    wander(a, t);
+  } else {                                           // holding still still looks alive
+    a.wx += Math.sin(t * .0031 + a.ph) * .12; a.wy += Math.cos(t * .0027 + a.ph) * .12;
+  }
+}
+
+/* ============================== main loop =========================== */
+let last = performance.now(), heroVisible = true, three = null, gathered = false, hudText = '';
+const gatherEl = $('[data-gather]'), gFrame = $('.gather-frame'), gChip = $('.gather-chip'), hudState = $('#hudState');
+
+function frame(t) {
+  started = true;
+  const dt = Math.min(50, t - last) / 16.67; last = t;
+  const vw = innerWidth, vh = innerHeight, sy = scrollY;
+  DOCH = document.documentElement.scrollHeight;
+
+  /* 1 · READ (all layout reads first) */
+  for (const n of nodes) {
+    const r = n.el.getBoundingClientRect();
+    n.r = r;
+    n.fr.left = r.left - n.ax; n.fr.top = r.top - n.ay; n.fr.width = r.width; n.fr.height = r.height;   // undo our own translate
+    n.vis = r.bottom > 0 && r.top < vh && r.right > 0 && r.left < vw && r.width > 0;
+    n.inView = n.fr.width > 0 && (n.fixed || (n.fr.top < vh * .92 && n.fr.top + n.fr.height > 0));
+  }
+  if (gatherEl) {
+    const gr = gatherEl.getBoundingClientRect();
+    ANCHOR.x = gr.left + gr.width / 2; ANCHOR.y = gr.top + gr.height / 2;
+    const toBottom = DOCH - (sy + vh), aFinal = ANCHOR.y - toBottom, den = vh - aFinal;
+    G = (DOCH > vh * 1.5 && den > 1) ? smooth(clamp((vh - ANCHOR.y) / den, 0, 1)) : 0;   // 0 as the stage enters, 1 at the very bottom
+  }
+
+  /* 2 · queue elements that came into view */
+  for (const n of nodes) if (n.state === 'hidden' && n.inView) { n.state = 'queued'; queue.push(n); }
+  if (G > .6) while (queue.length) instant(queue.shift());       // at the bottom nobody starts a new drag
+
+  /* 3 · drag progress → T */
+  for (const n of nodes) {
+    if (n.state !== 'drag') continue;
+    const p = (t - n.dragStart) / n.dragDur;
+    if (p <= 0) { n.T.x = n.D.x; n.T.y = n.D.y; }
+    else if (p >= 1) { n.T.x = 0; n.T.y = 0; finish(n, t); }
+    else { const e = 1 - Math.pow(1 - p, 2.6); n.T.x = n.D.x * (1 - e); n.T.y = n.D.y * (1 - e); }
+  }
+
+  /* 4 · agents: work position, then blend toward the gather cluster */
+  const rot = t * .00035;
+  for (const a of agents) {
+    stepAgent(a, t);
+    const inDrag = a.job && a.job.state === 'drag';
+    const stagger = smooth(clamp(G * 1.35 - (a.i / Math.max(1, agents.length)) * .35, 0, 1));    // arrive one after another
+    if (inDrag) { a.gk = 0; a.x = a.wx; a.y = a.wy; continue; }
+    a.gk += (stagger - a.gk) * (1 - Math.exp(-dt * .22));
+    const rr = CONFIG.gatherSpacing * Math.sqrt(a.i + .6) * (1 + .04 * Math.sin(t * .002 + a.i)), th = a.i * 2.39996 + rot;
+    const sx = ANCHOR.x + rr * Math.cos(th), sy2 = ANCHOR.y + rr * Math.sin(th) * .9;
+    a.x = a.wx + (sx - a.wx) * a.gk; a.y = a.wy + (sy2 - a.wy) * a.gk;
+  }
+  const all = agents.length > 0 && agents.every(a => a.gk > .96);
+  if (all !== gathered) {
+    gathered = all; document.body.classList.toggle('gathered', all);
+    if (all) agents.forEach(pulse);
+  }
+
+  /* 5 · WRITE (overlay + the elements being carried) */
+  for (const n of nodes) {
+    const x = +n.T.x.toFixed(2), y = +n.T.y.toFixed(2);
+    if (x !== n.ax || y !== n.ay) {
+      n.el.style.transform = (x || y) ? `translate3d(${x}px,${y}px,0)` : '';
+      n.ax = x; n.ay = y;
+    }
+    const want = n.vis && (n.ghost || n.state === 'drag' || t < n.until || (DESIGN && n.state === 'done'));
+    if (want) {
+      if (!n.box) n.box = makeBox(n.fixed);
+      const w = Math.round(n.fr.width), h = Math.round(n.fr.height);
+      n.box.style.transform = `translate3d(${(n.fr.left + n.T.x).toFixed(1)}px,${(n.fr.top + n.T.y + (n.fixed ? 0 : sy)).toFixed(1)}px,0)`;   // layout rect + CURRENT T, in document space
+      if (n.w !== w || n.h !== h) { n.box.style.width = w + 'px'; n.box.style.height = h + 'px'; n.box.lastChild.textContent = w + ' × ' + h; n.w = w; n.h = h; }
+      if (n.gh !== n.ghost) { n.box.classList.toggle('ghost', n.ghost); n.gh = n.ghost; }
+      if (!n.shown) { n.box.classList.add('on'); n.shown = true; }
+    } else if (n.shown) { n.box.classList.remove('on'); n.shown = false; }
+  }
+  for (const a of agents) a.el.style.transform = `translate3d(${a.x.toFixed(1)}px,${(a.y + sy).toFixed(1)}px,0)`;   // viewport → document space
+  if (gatherEl) {
+    gFrame.style.opacity = G.toFixed(3);
+    gChip.style.opacity = clamp((G - .6) / .4, 0, 1).toFixed(3);
+  }
+  const txt = gathered ? 'synced' : (agents.some(a => a.job) || queue.length) ? 'building' : 'watching';
+  if (txt !== hudText) { hudText = txt; hudState.textContent = txt; }
+
+  /* 6 · 3D */
+  if (three && heroVisible && !document.hidden) three.tick(t);
+  requestAnimationFrame(frame);
+}
+
+/* ============================== HUD ================================= */
+const btnDesign = $('#btnDesign'), btnReplay = $('#btnReplay');
+function setDesign(on) { DESIGN = on; document.body.classList.toggle('design', on); btnDesign.setAttribute('aria-pressed', String(on)); }
+btnDesign.addEventListener('click', () => setDesign(!DESIGN));
+function replay() {
+  queue.length = 0;
+  for (const n of nodes) {
+    n.el.classList.remove('in'); n.el.style.transform = ''; n.el.style.willChange = '';
+    n.state = 'hidden'; n.T.x = n.T.y = n.ax = n.ay = 0; n.ghost = false; n.until = 0; n.agent = null;
+  }
+  for (const a of agents) {
+    const p = edgePoint(); a.job = null; a.s = null; a.dwellUntil = 0; a.wx = p.x; a.wy = p.y; a.gk = 0;
+    a.el.classList.remove('grab', 'working');
+  }
+  scrollTo({top: 0, behavior: 'auto'});
+}
+btnReplay.addEventListener('click', replay);
+addEventListener('keydown', e => {
+  if (e.metaKey || e.ctrlKey || e.altKey || /input|textarea/i.test(e.target.tagName)) return;
+  if (e.key === 'd' || e.key === 'D') setDesign(!DESIGN);
+  if (e.key === 'r' || e.key === 'R') replay();
+});
+
+/* ============================== 3D hero ============================= */
+function initHero() {
+  const host = $('#hero3d');
+  if (typeof THREE === 'undefined') { document.documentElement.classList.add('no-webgl'); return; }
+  let renderer;
+  try { renderer = new THREE.WebGLRenderer({antialias: true, alpha: true, powerPreference: 'high-performance'}); }
+  catch (_) { document.documentElement.classList.add('no-webgl'); return; }
+  renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
+  renderer.outputEncoding = THREE.sRGBEncoding;
+  renderer.domElement.addEventListener('webglcontextlost', e => { e.preventDefault(); document.documentElement.classList.add('no-webgl'); });
+  host.appendChild(renderer.domElement);
+
+  const scene = new THREE.Scene();
+  const cam = new THREE.PerspectiveCamera(36, 1, .1, 50); cam.position.set(0, 0, 6.3);
+  scene.add(new THREE.AmbientLight(0x8fa4ff, .55));
+  const key = new THREE.DirectionalLight(0xffffff, 1.25); key.position.set(3, 4, 5); scene.add(key);
+  const rim = new THREE.DirectionalLight(0x4d7cff, 1.0); rim.position.set(-4, -1, -3); scene.add(rim);
+  const warm = new THREE.PointLight(0xffb62e, 2.2, 8); warm.position.set(1.4, .6, 2.2); scene.add(warm);
+
+  const group = new THREE.Group(); scene.add(group);
+  const P = 2, Q = 3, R = .95;
+  const blue = new THREE.MeshStandardMaterial({color: 0x2f6bff, metalness: .55, roughness: .28});
+  group.add(new THREE.Mesh(new THREE.TorusKnotGeometry(R, .2, 220, 24, P, Q), blue));
+
+  const spire = new THREE.Mesh(new THREE.ConeGeometry(.11, 1.7, 6), new THREE.MeshStandardMaterial({color: 0x4d7cff, metalness: .5, roughness: .25, emissive: 0x112a77, emissiveIntensity: .8}));
+  spire.position.y = .15; group.add(spire);
+
+  const goldMat = new THREE.MeshStandardMaterial({color: 0xffb62e, emissive: 0xff9a00, emissiveIntensity: 1.1, roughness: .35});
+  const glowMat = new THREE.MeshBasicMaterial({color: 0xffb62e, transparent: true, opacity: .2, depthWrite: false, blending: THREE.AdditiveBlending});
+  const sg = new THREE.SphereGeometry(.27, 28, 20), gg = new THREE.SphereGeometry(.27, 16, 12);   // r > tube radius (.2) so nodes stay visible
+  for (let i = 0; i < 6; i++) {                     // same parametrisation as THREE.TorusKnotGeometry
+    const u = i / 6 * P * Math.PI * 2, qp = Q / P * u, cs = Math.cos(qp);
+    const x = R * (2 + cs) * .5 * Math.cos(u), y = R * (2 + cs) * Math.sin(u) * .5, z = R * Math.sin(qp) * .5;
+    const m = new THREE.Mesh(sg, goldMat); m.position.set(x, y, z); group.add(m);
+    const g = new THREE.Mesh(gg, glowMat); g.position.copy(m.position); g.scale.setScalar(1.9); group.add(g);
+  }
+
+  let tx = 0, ty = 0;
+  addEventListener('pointermove', e => { tx = (e.clientX / innerWidth - .5) * .7; ty = (e.clientY / innerHeight - .5) * .5; }, {passive: true});
+  const resize = () => { const w = host.clientWidth || 400, h = host.clientHeight || 400; renderer.setSize(w, h, false); cam.aspect = w / h; cam.updateProjectionMatrix(); };
+  new ResizeObserver(resize).observe(host); resize();
+  new IntersectionObserver(es => { heroVisible = es[0].isIntersecting; }).observe(host);
+
+  const draw = t => {
+    const s = RM ? 0 : t * .00025;
+    group.rotation.y += ((s * 2.2 + tx) - group.rotation.y) * .05;
+    group.rotation.x += ((.25 + ty) - group.rotation.x) * .05;
+    group.position.y = RM ? 0 : Math.sin(t * .0007) * .06;
+    renderer.render(scene, cam);
+  };
+  draw(0);
+  three = {tick: RM ? () => {} : draw};
+}
+try { initHero(); } catch (err) { console.warn('hero3d disabled:', err); document.documentElement.classList.add('no-webgl'); }
+
+/* ============================== start =============================== */
+if (RM) {                                   // reduced motion: everything is simply there
+  nodes.forEach(n => { n.state = 'done'; reveal(n); });
+  hudState.textContent = 'static';
+}
+window.__dtw = {nodes, agents, get gather() { return G; }};   // read-only debug hook used by scripts/preview.py
+requestAnimationFrame(frame);
+})();
+</script>
+
+</body>
+</html>
